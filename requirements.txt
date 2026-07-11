@@ -1,0 +1,34 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+pydantic-settings==2.5.2
+sqlalchemy==2.0.35
+psycopg2-binary==2.9.9
+alembic==1.13.3
+
+# Ingestion / parsing
+unstructured[all-docs]==0.15.13
+pytesseract==0.3.13
+pypdf==5.0.1
+
+# Embeddings / RAG orchestration
+llama-index==0.11.20
+sentence-transformers==3.1.1
+chromadb==0.5.15
+
+# Knowledge graph
+neo4j==5.25.0
+spacy==3.7.6
+
+# Search / ranking
+rank-bm25==0.2.2
+sentence-transformers==3.1.1
+
+# Eval / monitoring
+mlflow==2.16.2
+prometheus-client==0.21.0
+
+# Utilities
+python-multipart==0.0.12
+httpx==0.27.2
+tenacity==9.0.0

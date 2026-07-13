@@ -7,29 +7,31 @@ psycopg2-binary==2.9.9
 alembic==1.13.3
 
 # Ingestion / parsing
-unstructured[all-docs]==0.15.13
+# Pins loosened here on purpose: unstructured, llama-index, and pypdf each
+# depend on specific (and differing) pypdf ranges. Letting pip pick a
+# mutually-compatible version avoids repeated ResolutionImpossible errors.
+unstructured[all-docs]>=0.15.13,<0.16.0
 pytesseract==0.3.13
-pypdf==5.0.1
+pypdf>=4.0.1,<5.0.0
 
 # Embeddings / RAG orchestration
-llama-index==0.11.20
-sentence-transformers==3.1.1
-chromadb==0.5.15
+llama-index>=0.11.20,<0.12.0
+sentence-transformers>=3.1.1,<4.0.0
+chromadb>=0.5.15,<0.6.0
 
 # Knowledge graph
-neo4j==5.25.0
-spacy==3.7.6
+neo4j>=5.25.0,<6.0.0
+spacy>=3.7.6,<3.8.0
 
 # Search / ranking
 rank-bm25==0.2.2
-sentence-transformers==3.1.1
 
 # Eval / monitoring
-mlflow==2.16.2
+mlflow>=2.16.2,<2.17.0
 prometheus-client==0.21.0
 
 # LLM provider (free tier — Google Gemini)
-google-genai==1.2.0
+google-genai>=1.2.0,<2.0.0
 
 # Utilities
 python-multipart==0.0.12

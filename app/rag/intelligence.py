@@ -1,13 +1,13 @@
 from datetime import datetime, timedelta
 
-import anthropic
+from google import genai
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.embeddings.embedder import embed_texts
 
-_client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+_client = genai.Client(api_key=settings.google_api_key)
 
 
 def detect_duplicates(db: Session, similarity_threshold: float = 0.92) -> list[dict]:
@@ -45,24 +45,19 @@ def detect_outdated(db: Session, staleness_days: int = 180) -> list[dict]:
 
 
 def compare_documents(text_a: str, text_b: str) -> str:
-    response = _client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1000,
-        messages=[{
-            "role": "user",
-            "content": f"Compare these two documents. Summarize key differences and overlaps.\n\nDocument A:\n{text_a[:4000]}\n\nDocument B:\n{text_b[:4000]}",
-        }],
+    response = _client.models.generate_content(
+        model=settings.gemini_model,
+        contents=f"Compare these two documents. Summarize key differences and overlaps.\n\nDocument A:\n{text_a[:4000]}\n\nDocument B:\n{text_b[:4000]}",
     )
-    return "".join(b.text for b in response.content if b.type == "text")
+    return response.text or ""
 
 
 def summarize_document(text_: str) -> str:
-    response = _client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=500,
-        messages=[{"role": "user", "content": f"Summarize this document in 4-6 sentences:\n\n{text_[:6000]}"}],
+    response = _client.models.generate_content(
+        model=settings.gemini_model,
+        contents=f"Summarize this document in 4-6 sentences:\n\n{text_[:6000]}",
     )
-    return "".join(b.text for b in response.content if b.type == "text")
+    return response.text or ""
 
 
 def detect_knowledge_gaps(db: Session, min_score_threshold: float = 0.3, min_occurrences: int = 3) -> list[dict]:

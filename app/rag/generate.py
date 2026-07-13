@@ -1,9 +1,10 @@
-import anthropic
+from google import genai
+from google.genai import types
 
 from app.core.config import settings
 from app.search.hybrid import hybrid_search
 
-_client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+_client = genai.Client(api_key=settings.google_api_key)
 
 SYSTEM_PROMPT = """You are Ezitech's Enterprise Knowledge Intelligence assistant.
 Answer only using the provided source chunks. For every claim, cite the source
@@ -22,17 +23,16 @@ def generate_answer(db, query: str, top_k: int = 6) -> dict:
     hits = hybrid_search(db, query, top_k=top_k)
     context = build_context_block(hits)
 
-    response = _client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1000,
-        system=SYSTEM_PROMPT,
-        messages=[{
-            "role": "user",
-            "content": f"Sources:\n{context}\n\nQuestion: {query}",
-        }],
+    response = _client.models.generate_content(
+        model=settings.gemini_model,
+        contents=f"Sources:\n{context}\n\nQuestion: {query}",
+        config=types.GenerateContentConfig(
+            system_instruction=SYSTEM_PROMPT,
+            max_output_tokens=1000,
+        ),
     )
 
-    answer_text = "".join(block.text for block in response.content if block.type == "text")
+    answer_text = response.text or ""
 
     return {
         "answer": answer_text,

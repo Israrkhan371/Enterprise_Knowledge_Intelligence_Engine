@@ -13,7 +13,7 @@ Entity/relationship extraction (spaCy) -> Neo4j (knowledge graph)
         v
 Search layer: semantic | keyword (Postgres FTS) | hybrid (RRF) | metadata | context-aware
         v
-RAG answer generation (Claude) + citation verification
+RAG answer generation (Google Gemini, free tier) + citation verification
         v
 Intelligence layer: duplicate detection, staleness detection, gap detection,
                      comparison, summarization, ranking
@@ -27,7 +27,7 @@ Monitoring: Prometheus metrics at /metrics
 ## Quickstart
 
 ```bash
-cp .env.example .env          # fill in ANTHROPIC_API_KEY
+cp .env.example .env          # fill in GOOGLE_API_KEY (free at https://aistudio.google.com/apikey)
 docker compose up --build
 ```
 

@@ -12,7 +12,8 @@ class Settings(BaseSettings):
     chroma_port: int = 8000
     chroma_collection: str = "ekie_documents"
 
-    anthropic_api_key: str = ""
+    google_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
 
     mlflow_tracking_uri: str = "http://mlflow:5000"

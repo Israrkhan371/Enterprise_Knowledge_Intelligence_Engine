@@ -17,6 +17,11 @@ pypdf>=4.0.1,<5.0.0
 
 # Embeddings / RAG orchestration
 llama-index>=0.11.20,<0.12.0
+# Pinned exactly: pip previously spent 5+ minutes backtracking through ~90
+# versions of these three to find a compatible set. These are that result.
+llama-parse==0.6.21
+llama-cloud-services==0.6.21
+llama-cloud==0.1.19
 sentence-transformers>=3.1.1,<4.0.0
 chromadb>=0.5.15,<0.6.0
 

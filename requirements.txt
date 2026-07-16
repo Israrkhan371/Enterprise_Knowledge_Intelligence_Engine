@@ -8,22 +8,38 @@ psycopg2-binary==2.9.9
 alembic==1.13.3
 
 # Ingestion / parsing
-# Pins loosened here on purpose: unstructured, llama-index, and pypdf each
-# depend on specific (and differing) pypdf ranges. Letting pip pick a
-# mutually-compatible version avoids repeated ResolutionImpossible errors.
-unstructured[all-docs]>=0.15.13,<0.16.0
+unstructured[all-docs]==0.15.14
 pytesseract==0.3.13
-pypdf>=4.0.1,<5.0.0
+pypdf==4.3.1
+# pdfminer.six must stay at whatever version pdfplumber (an unstructured
+# dependency) hard-pins — currently 20260107. Downgrading it here breaks
+# the install (ResolutionImpossible against pdfplumber). The resulting
+# PSSyntaxError ImportError from unstructured's PDF partitioner is fixed
+# in code instead — see the compatibility shim at the top of
+# app/ingestion/loaders.py.
+pdfminer.six==20260107
 
 # Embeddings / RAG orchestration
-llama-index>=0.11.20,<0.12.0
-# Pinned exactly: pip previously spent 5+ minutes backtracking through ~90
-# versions of these three to find a compatible set. These are that result.
+# Pinned exactly to the combination proven to install cleanly in the first
+# successful build — without these exact pins, pip backtracks through 90+
+# versions of llama-index-indices-managed-llama-cloud, llama-index-readers-*,
+# huggingface-hub, transformers, pandas, and google-genai trying to satisfy
+# loose ranges + the pdfminer.six/unstructured pins above at the same time.
+llama-index==0.11.22
+llama-index-core==0.11.23
+llama-index-indices-managed-llama-cloud==0.6.0
+llama-index-readers-llama-parse==0.3.0
+llama-index-readers-file==0.2.2
 llama-parse==0.6.21
 llama-cloud-services==0.6.21
 llama-cloud==0.1.19
-sentence-transformers>=3.1.1,<4.0.0
-chromadb>=0.5.15,<0.6.0
+huggingface-hub==0.36.2
+transformers==4.46.3
+sentence-transformers==3.4.1
+tokenizers==0.20.3
+chromadb==0.5.23
+pandas==2.3.3
+opencv-python==4.11.0.86
 
 # Knowledge graph
 neo4j>=5.25.0,<6.0.0
@@ -37,7 +53,9 @@ mlflow>=2.16.2,<2.17.0
 prometheus-client==0.21.0
 
 # LLM provider (free tier — Google Gemini)
-google-genai>=1.2.0,<2.0.0
+# Pinned exactly — pip backtracked from 1.75.0 down through 70+ releases
+# to reach this one while also satisfying the pins above.
+google-genai==1.2.0
 
 # Utilities
 python-multipart==0.0.12

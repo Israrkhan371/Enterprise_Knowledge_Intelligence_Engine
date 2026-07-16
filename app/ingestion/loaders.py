@@ -7,6 +7,21 @@ the rest of the ingestion flow.
 """
 from pathlib import Path
 
+# --- Compatibility shim -----------------------------------------------
+# pdfminer.six >= 20260107 renamed the re-export in pdfminer.pdfparser
+# from PSSyntaxError to PDFSyntaxError (the class itself still lives in
+# pdfminer.psparser, unchanged). unstructured==0.15.14's PDF partitioner
+# still does `from pdfminer.pdfparser import PSSyntaxError` directly,
+# which raises ImportError on the newer pdfminer.six. We can't downgrade
+# pdfminer.six — pdfplumber (also required by unstructured[all-docs])
+# hard-pins it to exactly 20260107 — so we restore the old alias instead.
+# Must run before `unstructured.partition.pdf` is imported anywhere.
+import pdfminer.pdfparser as _pdfparser
+if not hasattr(_pdfparser, "PSSyntaxError"):
+    from pdfminer.psparser import PSSyntaxError as _PSSyntaxError
+    _pdfparser.PSSyntaxError = _PSSyntaxError
+# ------------------------------------------------------------------------
+
 
 def load_pdf(path: str) -> str:
     from unstructured.partition.pdf import partition_pdf
@@ -56,6 +71,7 @@ SOURCE_LOADERS = {
     "docx": load_docx,
     "markdown": load_markdown,
     "transcript": load_transcript,
+    "github": load_github_repo,
 }
 
 

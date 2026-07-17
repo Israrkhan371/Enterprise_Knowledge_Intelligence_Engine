@@ -39,6 +39,18 @@ def load_markdown(path: str) -> str:
     return Path(path).read_text(encoding="utf-8", errors="ignore")
 
 
+def load_code(path: str) -> str:
+    """
+    Loads a single local source-code file as plain text, prefixed with its
+    filename so the language/purpose survives chunking (e.g. a chunk that
+    starts mid-function still carries "# File: auth/login.py" as context).
+    Deliberately simple — code doesn't need unstructured's layout detection,
+    just the raw text with a small amount of provenance.
+    """
+    text = Path(path).read_text(encoding="utf-8", errors="ignore")
+    return f"# File: {Path(path).name}\n\n{text}"
+
+
 def load_transcript(path: str) -> str:
     # Meeting notes / recorded session transcripts are plain text or .vtt/.srt
     return Path(path).read_text(encoding="utf-8", errors="ignore")
@@ -48,6 +60,12 @@ def load_github_repo(repo_url: str, github_token: str | None = None) -> list[dic
     """
     Pulls README, docs/, and top-level source files from a GitHub repo.
     Returns a list of {path, text} so each file becomes its own Document row.
+
+    NOTE: returns list[dict], not str like every other loader in this module
+    — a repo is inherently many documents, not one. Use ingest_github_repo()
+    in app/ingestion/pipeline.py to fan these out into separate Document
+    rows; do not call this via load_by_source_type() / ingest_document(),
+    which assume a single str of text per source.
     """
     import httpx
 
@@ -70,12 +88,22 @@ SOURCE_LOADERS = {
     "pdf": load_pdf,
     "docx": load_docx,
     "markdown": load_markdown,
+    "code": load_code,
     "transcript": load_transcript,
-    "github": load_github_repo,
 }
+# github is intentionally excluded from SOURCE_LOADERS: load_github_repo()
+# returns list[dict], not str, so it can't go through load_by_source_type()
+# / ingest_document() without breaking chunk_text(). Use
+# ingest_github_repo() in pipeline.py instead.
 
 
 def load_by_source_type(source_type: str, path: str) -> str:
+    if source_type == "github":
+        raise ValueError(
+            "source_type='github' returns multiple documents, not one — "
+            "call ingest_github_repo() in app/ingestion/pipeline.py instead "
+            "of load_by_source_type()/ingest_document()."
+        )
     loader = SOURCE_LOADERS.get(source_type)
     if not loader:
         raise ValueError(f"No loader registered for source_type={source_type}")

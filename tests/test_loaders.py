@@ -16,6 +16,8 @@ from app.ingestion.loaders import (
     load_markdown,
     load_code,
     load_transcript,
+    load_meeting_notes,
+    load_blog,
     load_github_repo,
     load_by_source_type,
     SOURCE_LOADERS,
@@ -136,11 +138,145 @@ def test_load_code_includes_filename_header(sample_code_path):
 
 # --- transcript -------------------------------------------------------
 
-def test_load_transcript_returns_expected_text(tmp_path):
-    path = tmp_path / "sample.vtt"
+def test_load_transcript_plain_text_passthrough(tmp_path):
+    path = tmp_path / "sample.txt"
     path.write_text(EXPECTED_TEXT, encoding="utf-8")
     text = load_transcript(str(path))
     assert EXPECTED_TEXT in text
+
+
+def test_load_transcript_strips_vtt_timestamps_and_header(tmp_path):
+    # A realistic WebVTT export: header, cue timestamps, spoken lines.
+    vtt_content = (
+        "WEBVTT\n\n"
+        "00:00:01.000 --> 00:00:04.000\n"
+        f"{EXPECTED_TEXT}\n\n"
+        "00:00:04.500 --> 00:00:07.200\n"
+        "Second line of dialogue.\n"
+    )
+    path = tmp_path / "sample.vtt"
+    path.write_text(vtt_content, encoding="utf-8")
+
+    text = load_transcript(str(path))
+
+    assert EXPECTED_TEXT in text
+    assert "Second line of dialogue." in text
+    assert "WEBVTT" not in text
+    assert "-->" not in text
+    assert "00:00:01.000" not in text
+
+
+def test_load_transcript_strips_srt_cue_numbers_and_timestamps(tmp_path):
+    # A realistic SRT export: numeric cue index, comma-decimal timestamps.
+    srt_content = (
+        "1\n"
+        "00:00:01,000 --> 00:00:04,000\n"
+        f"{EXPECTED_TEXT}\n\n"
+        "2\n"
+        "00:00:04,500 --> 00:00:07,200\n"
+        "Second line of dialogue.\n"
+    )
+    path = tmp_path / "sample.srt"
+    path.write_text(srt_content, encoding="utf-8")
+
+    text = load_transcript(str(path))
+
+    assert EXPECTED_TEXT in text
+    assert "Second line of dialogue." in text
+    assert "-->" not in text
+    # bare cue-number lines ("1", "2") should be stripped, not just timestamps
+    lines = text.splitlines()
+    assert "1" not in lines
+    assert "2" not in lines
+
+
+def test_load_transcript_raises_on_missing_file():
+    with pytest.raises(FileNotFoundError):
+        load_transcript("/nonexistent/path/sample.vtt")
+
+
+# --- meeting_notes -------------------------------------------------------
+
+def test_load_meeting_notes_plain_text(tmp_path):
+    path = tmp_path / "notes.txt"
+    path.write_text(f"Action items:\n{EXPECTED_TEXT}\n", encoding="utf-8")
+    text = load_meeting_notes(str(path))
+    assert EXPECTED_TEXT in text
+    assert "Action items:" in text
+
+
+def test_load_meeting_notes_strips_markup_if_present(tmp_path):
+    # Notes exported from a bot alongside timestamps should still get
+    # cleaned, same as a real transcript.
+    content = (
+        "00:00:01.000 --> 00:00:04.000\n"
+        f"{EXPECTED_TEXT}\n"
+    )
+    path = tmp_path / "notes_with_timestamps.txt"
+    path.write_text(content, encoding="utf-8")
+    text = load_meeting_notes(str(path))
+    assert EXPECTED_TEXT in text
+    assert "-->" not in text
+
+
+def test_load_meeting_notes_raises_on_missing_file():
+    with pytest.raises(FileNotFoundError):
+        load_meeting_notes("/nonexistent/path/notes.txt")
+
+
+# --- blog ---------------------------------------------------------------
+
+def test_load_blog_from_local_html_file(tmp_path):
+    html = (
+        "<html><head><style>body{color:red}</style>"
+        "<script>console.log('noise')</script></head>"
+        f"<body><h1>Title</h1><p>{EXPECTED_TEXT}</p></body></html>"
+    )
+    path = tmp_path / "post.html"
+    path.write_text(html, encoding="utf-8")
+
+    text = load_blog(str(path))
+
+    assert EXPECTED_TEXT in text
+    assert "Title" in text
+    # script/style content must not leak into extracted text
+    assert "console.log" not in text
+    assert "color:red" not in text
+
+
+def test_load_blog_from_url_mocked(monkeypatch):
+    import httpx
+
+    class FakeResponse:
+        def __init__(self, text):
+            self.text = text
+
+        def raise_for_status(self):
+            pass
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, url):
+            html = f"<html><body><p>{EXPECTED_TEXT}</p></body></html>"
+            return FakeResponse(html)
+
+    monkeypatch.setattr(httpx, "Client", FakeClient)
+
+    text = load_blog("https://example.com/blog/post")
+    assert EXPECTED_TEXT in text
+
+
+def test_load_blog_raises_on_missing_local_file():
+    with pytest.raises(FileNotFoundError):
+        load_blog("/nonexistent/path/post.html")
 
 
 # --- github_repo (mocked — no real network call) -----------------------
@@ -148,8 +284,12 @@ def test_load_transcript_returns_expected_text(tmp_path):
 def test_load_github_repo_returns_list_of_dicts(monkeypatch):
     """
     load_github_repo hits the real GitHub API, so this mocks httpx.Client
-    entirely rather than making a live network call in tests. Confirms the
-    documented return shape: list[{"path": ..., "text": ...}].
+    entirely rather than making a live network call in tests. This mock
+    simulates a repo with a nested folder structure to confirm recursion
+    works, not just flat root-level files — a real bug (this loader only
+    ever saw README.md at the repo root) was caught by manual testing
+    against a real multi-file repo and fixed here; this mock reproduces
+    that same shape so it can't silently regress again.
     """
     import httpx
 
@@ -157,6 +297,81 @@ def test_load_github_repo_returns_list_of_dicts(monkeypatch):
         def __init__(self, json_data=None, text=""):
             self._json = json_data
             self.text = text
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return self._json
+
+    # Simulated tree:
+    #   README.md
+    #   image.png                (wrong extension -> excluded)
+    #   app/                     (subfolder -> must recurse into it)
+    #     main.py
+    #   node_modules/            (excluded directory -> must NOT recurse)
+    #     junk.md
+    responses = {
+        "https://api.github.com/repos/example/repo/contents": [
+            {"type": "file", "name": "README.md", "path": "README.md",
+             "download_url": "https://example.com/README.md"},
+            {"type": "file", "name": "image.png", "path": "image.png",
+             "download_url": "https://example.com/image.png"},
+            {"type": "dir", "name": "app",
+             "url": "https://api.github.com/repos/example/repo/contents/app"},
+            {"type": "dir", "name": "node_modules",
+             "url": "https://api.github.com/repos/example/repo/contents/node_modules"},
+        ],
+        "https://api.github.com/repos/example/repo/contents/app": [
+            {"type": "file", "name": "main.py", "path": "app/main.py",
+             "download_url": "https://example.com/main.py"},
+        ],
+    }
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, url):
+            if url in responses:
+                return FakeResponse(json_data=responses[url])
+            if url == "https://api.github.com/repos/example/repo/contents/node_modules":
+                raise AssertionError(
+                    "load_github_repo must not descend into excluded directories"
+                )
+            return FakeResponse(text=EXPECTED_TEXT)
+
+    monkeypatch.setattr(httpx, "Client", FakeClient)
+
+    results = load_github_repo("https://github.com/example/repo")
+
+    paths = {r["path"] for r in results}
+    assert paths == {"README.md", "app/main.py"}
+    # image.png (wrong extension) and node_modules/junk.md (excluded dir)
+    # must both be absent
+    assert "image.png" not in paths
+    assert not any("node_modules" in p for p in paths)
+
+
+def test_load_github_repo_respects_max_depth(monkeypatch):
+    """
+    Confirms recursion actually stops past _GITHUB_MAX_DEPTH rather than
+    walking an arbitrarily deep tree forever.
+    """
+    import httpx
+    from app.ingestion import loaders as loaders_module
+
+    call_count = {"n": 0}
+
+    class FakeResponse:
+        def __init__(self, json_data):
+            self._json = json_data
 
         def raise_for_status(self):
             pass
@@ -175,29 +390,27 @@ def test_load_github_repo_returns_list_of_dicts(monkeypatch):
             return False
 
         def get(self, url):
-            if url.endswith("/contents"):
-                return FakeResponse(json_data=[
-                    {"type": "file", "name": "README.md", "path": "README.md",
-                     "download_url": "https://example.com/README.md"},
-                    {"type": "file", "name": "image.png", "path": "image.png",
-                     "download_url": "https://example.com/image.png"},
-                ])
-            return FakeResponse(text=EXPECTED_TEXT)
+            call_count["n"] += 1
+            # Every folder contains exactly one subfolder, forever —
+            # without a depth guard this would recurse indefinitely.
+            return FakeResponse(json_data=[
+                {"type": "dir", "name": "nested", "url": url + "/nested"},
+            ])
 
     monkeypatch.setattr(httpx, "Client", FakeClient)
 
-    results = load_github_repo("https://github.com/example/repo")
+    results = load_github_repo("https://github.com/example/infinite-repo")
 
-    # image.png should be filtered out — only .md/.py/.rst/.txt are pulled
-    assert len(results) == 1
-    assert results[0]["path"] == "README.md"
-    assert results[0]["text"] == EXPECTED_TEXT
+    assert results == []
+    assert call_count["n"] <= loaders_module._GITHUB_MAX_DEPTH + 1
 
 
 # --- dispatch table / load_by_source_type ------------------------------
 
 def test_source_loaders_registry_has_expected_keys():
-    assert set(SOURCE_LOADERS.keys()) == {"pdf", "docx", "markdown", "code", "transcript"}
+    assert set(SOURCE_LOADERS.keys()) == {
+        "pdf", "docx", "markdown", "code", "transcript", "meeting_notes", "blog"
+    }
 
 
 def test_github_excluded_from_source_loaders():

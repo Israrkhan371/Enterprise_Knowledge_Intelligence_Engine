@@ -19,6 +19,9 @@ from app.ingestion.loaders import (
     load_meeting_notes,
     load_blog,
     load_github_repo,
+    load_api_docs,
+    load_db_schema,
+    load_lms,
     load_by_source_type,
     SOURCE_LOADERS,
 )
@@ -405,11 +408,172 @@ def test_load_github_repo_respects_max_depth(monkeypatch):
     assert call_count["n"] <= loaders_module._GITHUB_MAX_DEPTH + 1
 
 
+# --- api_docs (OpenAPI/Swagger JSON) ------------------------------------
+
+def test_load_api_docs_includes_title_and_endpoint(tmp_path):
+    import json
+    spec = {
+        "info": {"title": "EKIE API", "version": "1.0.0", "description": EXPECTED_TEXT},
+        "paths": {
+            "/documents": {
+                "get": {
+                    "summary": "List documents",
+                    "parameters": [{"name": "category_id", "in": "query", "required": False}],
+                    "responses": {"200": {"description": "A list of documents"}},
+                }
+            }
+        },
+    }
+    path = tmp_path / "openapi.json"
+    path.write_text(json.dumps(spec), encoding="utf-8")
+
+    text = load_api_docs(str(path))
+
+    assert "EKIE API" in text
+    assert EXPECTED_TEXT in text
+    assert "GET /documents" in text
+    assert "category_id" in text
+    assert "200: A list of documents" in text
+
+
+def test_load_api_docs_skips_non_http_keys(tmp_path):
+    # "parameters" can appear as a path-level sibling key (shared across
+    # methods) rather than only inside a method — must not be treated as
+    # if it were an HTTP method itself.
+    import json
+    spec = {
+        "info": {"title": "EKIE API"},
+        "paths": {
+            "/documents": {
+                "parameters": [{"name": "shared_param", "in": "query"}],
+                "get": {"summary": "List documents"},
+            }
+        },
+    }
+    path = tmp_path / "openapi.json"
+    path.write_text(json.dumps(spec), encoding="utf-8")
+
+    text = load_api_docs(str(path))
+    assert "GET /documents" in text
+
+
+def test_load_api_docs_raises_on_missing_file():
+    with pytest.raises(FileNotFoundError):
+        load_api_docs("/nonexistent/path/openapi.json")
+
+
+# --- db_schema (.sql dumps) ----------------------------------------------
+
+def test_load_db_schema_keeps_ddl(tmp_path):
+    sql = (
+        "CREATE TABLE documents (\n"
+        "    id UUID PRIMARY KEY,\n"
+        f"    title TEXT -- {EXPECTED_TEXT}\n"
+        ");\n"
+        "ALTER TABLE documents ADD CONSTRAINT fk_category "
+        "FOREIGN KEY (category_id) REFERENCES categories(id);\n"
+    )
+    path = tmp_path / "schema.sql"
+    path.write_text(sql, encoding="utf-8")
+
+    text = load_db_schema(str(path))
+
+    assert "CREATE TABLE documents" in text
+    assert "ALTER TABLE documents" in text
+    assert EXPECTED_TEXT in text
+
+
+def test_load_db_schema_drops_insert_statements(tmp_path):
+    sql = (
+        "CREATE TABLE documents (id UUID PRIMARY KEY);\n"
+        "INSERT INTO documents (id) VALUES ('11111111-1111-1111-1111-111111111111');\n"
+    )
+    path = tmp_path / "schema.sql"
+    path.write_text(sql, encoding="utf-8")
+
+    text = load_db_schema(str(path))
+
+    assert "CREATE TABLE documents" in text
+    assert "INSERT INTO" not in text
+    assert "11111111" not in text
+
+
+def test_load_db_schema_drops_copy_data_block(tmp_path):
+    sql = (
+        "CREATE TABLE documents (id UUID PRIMARY KEY, title TEXT);\n"
+        "COPY documents (id, title) FROM stdin;\n"
+        "11111111-1111-1111-1111-111111111111\tSecret internal title\n"
+        "\\.\n"
+        "CREATE INDEX idx_documents_title ON documents (title);\n"
+    )
+    path = tmp_path / "schema.sql"
+    path.write_text(sql, encoding="utf-8")
+
+    text = load_db_schema(str(path))
+
+    assert "CREATE TABLE documents" in text
+    assert "CREATE INDEX idx_documents_title" in text
+    assert "Secret internal title" not in text
+    assert "COPY documents" not in text
+
+
+def test_load_db_schema_raises_on_missing_file():
+    with pytest.raises(FileNotFoundError):
+        load_db_schema("/nonexistent/path/schema.sql")
+
+
+# --- lms (SCORM zip / exported HTML) --------------------------------------
+
+def test_load_lms_from_html_file(tmp_path):
+    html = f"<html><body><h1>Lesson 1</h1><p>{EXPECTED_TEXT}</p></body></html>"
+    path = tmp_path / "lesson.html"
+    path.write_text(html, encoding="utf-8")
+
+    text = load_lms(str(path))
+
+    assert "Lesson 1" in text
+    assert EXPECTED_TEXT in text
+
+
+def test_load_lms_from_scorm_zip(tmp_path):
+    import zipfile
+
+    zip_path = tmp_path / "course.zip"
+    with zipfile.ZipFile(zip_path, "w") as archive:
+        archive.writestr(
+            "imsmanifest.xml",
+            "<manifest><organizations/></manifest>",
+        )
+        archive.writestr(
+            "lesson1.html",
+            f"<html><body><h1>Lesson 1</h1><p>{EXPECTED_TEXT}</p></body></html>",
+        )
+        archive.writestr(
+            "lesson2.html",
+            "<html><body><h1>Lesson 2</h1><p>Second lesson content.</p></body></html>",
+        )
+
+    text = load_lms(str(zip_path))
+
+    assert "lesson1.html" in text
+    assert EXPECTED_TEXT in text
+    assert "lesson2.html" in text
+    assert "Second lesson content." in text
+    # manifest is packaging metadata, not course content — must not appear
+    assert "organizations" not in text
+
+
+def test_load_lms_raises_on_missing_file():
+    with pytest.raises(FileNotFoundError):
+        load_lms("/nonexistent/path/lesson.html")
+
+
 # --- dispatch table / load_by_source_type ------------------------------
 
 def test_source_loaders_registry_has_expected_keys():
     assert set(SOURCE_LOADERS.keys()) == {
-        "pdf", "docx", "markdown", "code", "transcript", "meeting_notes", "blog"
+        "pdf", "docx", "markdown", "code", "transcript", "meeting_notes", "blog",
+        "api_docs", "db_schema", "lms",
     }
 
 

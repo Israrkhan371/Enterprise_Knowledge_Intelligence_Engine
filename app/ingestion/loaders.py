@@ -198,6 +198,164 @@ def load_github_repo(repo_url: str, github_token: str | None = None) -> list[dic
     return results
 
 
+def load_api_docs(path: str) -> str:
+    """
+    Loads an OpenAPI/Swagger spec (JSON) and flattens it into readable
+    text: API title/version/description, then each endpoint as
+    "METHOD /path — summary" with its description and parameter/response
+    summaries. A raw spec dump would bury the useful content in JSON
+    punctuation and structural nesting, which hurts both chunking
+    (arbitrary JSON line breaks) and semantic search (embeddings do
+    better on prose than syntax) — this produces prose-like text instead
+    so retrieval and citations work the same way they do for every other
+    source type.
+    """
+    import json
+    # utf-8-sig strips a leading BOM if present (e.g. files saved via
+    # PowerShell's `Out-File -Encoding utf8`, which writes UTF-8 WITH a
+    # BOM) and is a no-op otherwise. json.loads() has no tolerance for a
+    # stray BOM character — it fails with "Expecting value: line 1
+    # column 1" — so this loader needs the -sig variant even though the
+    # other loaders in this module can get away with plain "utf-8".
+    spec = json.loads(Path(path).read_text(encoding="utf-8-sig", errors="ignore"))
+
+    lines: list[str] = []
+    info = spec.get("info", {})
+    if info.get("title"):
+        lines.append(f"API: {info['title']}")
+    if info.get("version"):
+        lines.append(f"Version: {info['version']}")
+    if info.get("description"):
+        lines.append(info["description"])
+    lines.append("")
+
+    _HTTP_METHODS = ("get", "post", "put", "patch", "delete", "options", "head")
+
+    for route, methods in spec.get("paths", {}).items():
+        if not isinstance(methods, dict):
+            continue
+        for method, operation in methods.items():
+            if method.lower() not in _HTTP_METHODS or not isinstance(operation, dict):
+                continue
+
+            summary = operation.get("summary", "")
+            header = f"{method.upper()} {route}"
+            lines.append(f"{header} — {summary}" if summary else header)
+
+            if operation.get("description"):
+                lines.append(operation["description"])
+
+            params = operation.get("parameters", [])
+            param_bits = []
+            for p in params:
+                if not isinstance(p, dict):
+                    continue
+                name = p.get("name", "?")
+                loc = p.get("in", "?")
+                required = " (required)" if p.get("required") else ""
+                param_bits.append(f"{name} [{loc}]{required}")
+            if param_bits:
+                lines.append("Parameters: " + ", ".join(param_bits))
+
+            responses = operation.get("responses", {})
+            resp_bits = []
+            for code, resp in responses.items():
+                if not isinstance(resp, dict):
+                    continue
+                desc = resp.get("description", "")
+                resp_bits.append(f"{code}: {desc}" if desc else str(code))
+            if resp_bits:
+                lines.append("Responses: " + "; ".join(resp_bits))
+
+            lines.append("")
+
+    return "\n".join(lines)
+
+
+_SQL_DATA_STATEMENT_RE = re.compile(r"^\s*(INSERT\s+INTO|COPY)\b", re.IGNORECASE)
+_SQL_COPY_TERMINATOR_RE = re.compile(r"^\\\.\s*$")
+
+
+def load_db_schema(path: str) -> str:
+    """
+    Loads a .sql dump and keeps only the structural statements (CREATE
+    TABLE, ALTER TABLE, CREATE INDEX, COMMENT ON, plus any -- / block
+    comments left as documentation) while dropping INSERT INTO rows and
+    COPY ... FROM stdin data blocks. A schema dump commonly interleaves
+    DDL with the actual table data (sometimes thousands of rows) —
+    embedding raw data would bloat the vector store with row values
+    that are never useful for a "what does this table look like" query,
+    and could leak real records into the knowledge base. This keeps the
+    shape of the schema, not its contents.
+    """
+    # utf-8-sig strips a leading BOM if present, no-op otherwise — see
+    # load_api_docs() above for why this matters on Windows-authored files.
+    raw_text = Path(path).read_text(encoding="utf-8-sig", errors="ignore")
+
+    kept_lines: list[str] = []
+    skipping_copy_block = False
+    for line in raw_text.splitlines():
+        if skipping_copy_block:
+            if _SQL_COPY_TERMINATOR_RE.match(line):
+                skipping_copy_block = False
+            continue
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if _SQL_DATA_STATEMENT_RE.match(stripped):
+            if stripped.upper().startswith("COPY") and "FROM STDIN" in stripped.upper():
+                skipping_copy_block = True
+            continue
+        kept_lines.append(line)
+
+    return "\n".join(kept_lines)
+
+
+def load_lms(path: str) -> str:
+    """
+    Loads exported LMS course content. Handles two export shapes:
+      - A SCORM package (.zip) containing one or more HTML content files
+        (alongside imsmanifest.xml, which is ignored — it's packaging
+        metadata, not course content) — every HTML file in the package
+        is extracted and concatenated, each prefixed with its filename
+        so a multi-lesson course doesn't collapse into one
+        undifferentiated blob.
+      - A single already-exported HTML file (some LMS platforms export
+        a "print view" HTML directly instead of a SCORM zip).
+    Both paths go through the same tag-stripping as load_blog() so the
+    two loaders can't drift on how they clean HTML.
+    """
+    from bs4 import BeautifulSoup
+
+    def _html_to_text(html: str) -> str:
+        soup = BeautifulSoup(html, "html.parser")
+        for tag in soup(["script", "style"]):
+            tag.decompose()
+        text = soup.get_text(separator="\n")
+        return "\n".join(line.strip() for line in text.splitlines() if line.strip())
+
+    if Path(path).suffix.lower() == ".zip":
+        import zipfile
+        sections: list[str] = []
+        with zipfile.ZipFile(path) as archive:
+            html_names = sorted(
+                name for name in archive.namelist()
+                if name.lower().endswith((".html", ".htm"))
+            )
+            for name in html_names:
+                # utf-8-sig strips a leading BOM if present, no-op
+                # otherwise — see load_api_docs() above for why this
+                # matters on Windows-authored files.
+                html = archive.read(name).decode("utf-8-sig", errors="ignore")
+                text = _html_to_text(html)
+                if text:
+                    sections.append(f"# {name}\n\n{text}")
+        return "\n\n".join(sections)
+
+    html = Path(path).read_text(encoding="utf-8-sig", errors="ignore")
+    return _html_to_text(html)
+
+
 SOURCE_LOADERS = {
     "pdf": load_pdf,
     "docx": load_docx,
@@ -206,6 +364,9 @@ SOURCE_LOADERS = {
     "transcript": load_transcript,
     "meeting_notes": load_meeting_notes,
     "blog": load_blog,
+    "api_docs": load_api_docs,
+    "db_schema": load_db_schema,
+    "lms": load_lms,
 }
 # github is intentionally excluded from SOURCE_LOADERS: load_github_repo()
 # returns list[dict], not str, so it can't go through load_by_source_type()

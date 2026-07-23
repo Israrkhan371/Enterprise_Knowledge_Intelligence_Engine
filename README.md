@@ -56,15 +56,23 @@ endpoint, prioritizing breadth first (Week 1-3) then hardening via evaluation
 (Week 4) — see the accompanying `EKIE_4Week_Tracker.xlsx` for the day-by-day plan
 mapped to each requirement.
 
-- **Source loaders**: PDF and docx are implemented and Level-1 tested against
-  real files (`app/ingestion/loaders.py`) — verified 2026-07-16. Markdown is
-  implemented but not yet tested. GitHub-repo loading exists
-  (`load_github_repo`) and is registered in `SOURCE_LOADERS`, but it returns
-  `list[dict]` (one per file) instead of `str` like every other loader —
-  `pipeline.py` does not yet branch on that shape, so calling it end-to-end
-  will currently break. There is no local `load_code()` for individual code
-  files yet. Add new formats the same way: register a function in
-  `SOURCE_LOADERS`.
+- **Source loaders**: PDF and docx are implemented and manually verified
+  against real files (`app/ingestion/loaders.py`) — verified 2026-07-16.
+  Markdown and code (`load_code()`) are implemented and covered by
+  automated tests, along with GitHub, meeting notes, transcripts, and blog
+  loaders (`tests/test_loaders.py`, 25 passed/1 skipped, verified
+  2026-07-18). GitHub-repo loading (`load_github_repo`) returns `list[dict]`
+  (one per file) instead of `str` like every other loader, so it is
+  **deliberately excluded** from `SOURCE_LOADERS` and routed instead through
+  `ingest_github_repo()` in `pipeline.py`, which fans each file out into its
+  own `Document` row. It also recurses into subfolders (depth-guarded, with
+  a directory exclusion list for `.git`/`node_modules`/`__pycache__`/etc.) —
+  an earlier version only pulled root-level files, caught via manual testing
+  against the real EKIE repo and fixed 2026-07-18 (re-verified: 38 files
+  across every subfolder, no excluded dirs leaked in). Add new single-file
+  formats by registering a function in `SOURCE_LOADERS`; multi-file sources
+  like GitHub should follow the `ingest_github_repo()` fan-out pattern
+  instead.
 - **Keyword search** uses Postgres full-text search rather than standing up
   Elasticsearch/OpenSearch, to keep infra light; swap in `app/search/keyword.py`
   if you need BM25-grade ranking at larger scale.

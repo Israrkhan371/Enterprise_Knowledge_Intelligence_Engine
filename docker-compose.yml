@@ -44,7 +44,7 @@ services:
     restart: unless-stopped
 
   chromadb:
-    image: chromadb/chroma:0.5.15
+    image: chromadb/chroma:0.5.23
     container_name: ekie-chromadb
     ports:
       - "8001:8000"

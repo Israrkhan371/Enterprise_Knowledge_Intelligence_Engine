@@ -48,6 +48,7 @@ docker compose up --build
 | `app/admin/` | Upload, approval workflow, categories, analytics, quality endpoints |
 | `app/evaluation/` | Retrieval evaluation harness (precision/recall/MRR), MLflow logging |
 | `app/core/` | Config, DB session, ORM models |
+| `docs/knowledge_graph_schema.md` | Neo4j node/relationship types, constraints, indexes |
 
 ## Scope decisions (documented per case-study evaluation criteria)
 
@@ -106,6 +107,16 @@ re-discovers them the hard way on a fresh machine:
    **not** wrap this step in `--mount=type=cache` — cache-mount contents are
    discarded when the layer commits, so the model would never actually end
    up in the final image (this was tried and had to be reverted).
+5. **Neo4j takes 10-20+ seconds to start accepting Bolt connections** after
+   its container reports "started" (it's a JVM app). Since `app/main.py`
+   calls `GraphStore.init_schema()` at import time on every API startup, a
+   plain `depends_on: - neo4j` (container-started, not service-ready) races
+   this and crashes the API with
+   `neo4j.exceptions.ServiceUnavailable: ... Connection refused`. Fixed two
+   ways: `docker-compose.yml` gives `neo4j` a `cypher-shell`-based
+   healthcheck and `api` depends on `neo4j: condition: service_healthy`;
+   `app/main.py` also retries `init_schema()` with backoff as a safety net
+   for running `api` outside that ordering (e.g. restarting it alone).
 
 ## Running tests
 

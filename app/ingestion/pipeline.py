@@ -15,6 +15,23 @@ def _chunk_embed_store(db: Session, document: Document, text: str) -> Document:
     Used by both ingest_document() (single file) and ingest_github_repo()
     (one call per file in the repo) so the two paths can't drift apart.
     """
+    # Assign document.id before it's used below. Document.id has a
+    # Python-side `default=gen_uuid` callable (see app/core/models.py),
+    # but SQLAlchemy only invokes that default at flush/INSERT time, not
+    # at object construction. Without this db.add()+db.flush() up front,
+    # document.id stays None through the entire chunk/embed/store
+    # sequence below, and ChromaDB's metadata validation then rejects
+    # None outright ("Expected metadata value to be a str, int, float or
+    # bool, got None"). Found via manual end-to-end testing — the
+    # embedder and vector_store unit tests both passed in isolation
+    # because they used a hardcoded string document_id, which masked
+    # this integration bug completely; only calling the real pipeline
+    # function end-to-end surfaced it. flush() (not commit()) assigns
+    # the primary key without ending the transaction, so a failure later
+    # in this function can still be rolled back by the caller.
+    db.add(document)
+    db.flush()
+
     document.raw_text = text
     chunks = chunk_text(text)
 

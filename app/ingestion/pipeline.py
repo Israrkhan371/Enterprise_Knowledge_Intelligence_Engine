@@ -6,6 +6,33 @@ from app.ingestion.ocr import needs_ocr, ocr_scanned_pdf
 from app.ingestion.chunking import chunk_text
 from app.embeddings.embedder import embed_texts
 from app.embeddings.vector_store import upsert_chunks
+from app.graph.extract import extract_entities, extract_relationships
+from app.graph.build import GraphStore
+
+
+def _build_knowledge_graph(document: Document, text: str) -> None:
+    """
+    Full-document AI pass: NER + relation extraction, written into Neo4j.
+    Runs once on the whole document (not per-chunk) because entities and
+    their relationships are document-level concepts - chunking would cut
+    sentences and co-occurrence context in half at chunk boundaries.
+    """
+    entities = extract_entities(text)
+    relationships = extract_relationships(text, entities)
+
+    graph = GraphStore()
+    try:
+        graph.upsert_document_node(
+            document_id=document.id,
+            title=document.title,
+            source_type=document.source_type,
+        )
+        if entities:
+            graph.upsert_entities(document_id=document.id, entities=entities)
+        if relationships:
+            graph.upsert_relationships(relationships)
+    finally:
+        graph.close()
 
 
 def ingest_document(db: Session, document: Document, file_path: str) -> Document:
@@ -16,6 +43,14 @@ def ingest_document(db: Session, document: Document, file_path: str) -> Document
         text = ocr_scanned_pdf(file_path)
 
     document.raw_text = text
+
+    # --- Full-document AI (NER, relation extraction -> knowledge graph) ---
+    # Runs on the complete raw text, before chunking. Summarization,
+    # duplicate/version detection, and metadata extraction are separate
+    # full-document steps slated for later tasks and are not added here.
+    _build_knowledge_graph(document, text)
+
+    # --- Chunk-level AI (embeddings -> vector store, for semantic/hybrid RAG) ---
     chunks = chunk_text(text)
 
     embeddings = embed_texts(chunks)

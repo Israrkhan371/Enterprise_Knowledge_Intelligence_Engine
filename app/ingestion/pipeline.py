@@ -1,3 +1,5 @@
+import logging
+
 from sqlalchemy.orm import Session
 
 from app.core.models import Document, DocumentChunk
@@ -6,6 +8,53 @@ from app.ingestion.ocr import needs_ocr, ocr_scanned_pdf
 from app.ingestion.chunking import chunk_text
 from app.embeddings.embedder import embed_texts
 from app.embeddings.vector_store import upsert_chunks
+from app.graph.build import GraphStore
+from app.graph.extract import extract_entities, extract_relationships
+
+logger = logging.getLogger(__name__)
+
+
+def _populate_graph(document: Document, text: str) -> None:
+    """
+    Runs entity/relationship extraction over the *full* document text (not
+    the embedding chunks - see hybrid architecture note below) and upserts
+    the result into Neo4j.
+
+    Hybrid architecture: chunk-level text feeds embeddings/RAG (above),
+    while full-document text feeds NER/graph here. Chunking is tuned for
+    retrieval context (800 words, 120 overlap), which would fragment
+    entities and sentences across boundaries and undercount/duplicate
+    relationships if reused for NER - so this runs on the whole document
+    in one pass instead of per-chunk.
+
+    Called after the Postgres/ChromaDB writes are committed, and never
+    raises: a Neo4j hiccup (or the container still being up mid-restart,
+    same class of issue as the startup race fixed in main.py) shouldn't
+    fail an otherwise-successful ingestion. Failures are logged so they're
+    visible without blocking the document from reaching "pending".
+    """
+    store = GraphStore()
+    try:
+        store.upsert_document_node(
+            document_id=document.id,
+            title=document.title,
+            source_type=document.source_type,
+        )
+        entities = extract_entities(text)
+        if not entities:
+            return
+        store.upsert_entities(document.id, entities)
+        relationships = extract_relationships(text, entities)
+        if relationships:
+            store.upsert_relationships(relationships)
+    except Exception:
+        logger.exception(
+            "Graph population failed for document_id=%s (title=%r); "
+            "document ingestion still succeeded.",
+            document.id, document.title,
+        )
+    finally:
+        store.close()
 
 
 def _chunk_embed_store(db: Session, document: Document, text: str) -> Document:
@@ -54,6 +103,13 @@ def _chunk_embed_store(db: Session, document: Document, text: str) -> Document:
     db.add(document)
     db.commit()
     db.refresh(document)
+
+    # Graph population runs after the Postgres/ChromaDB commit above, on
+    # the full document text (see _populate_graph docstring for why it
+    # doesn't reuse `chunks`). It never raises, so a Neo4j failure can't
+    # undo the ingestion that already succeeded.
+    _populate_graph(document, text)
+
     return document
 
 

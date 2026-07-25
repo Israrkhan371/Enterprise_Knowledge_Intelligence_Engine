@@ -19,8 +19,24 @@ or DocumentChunk() ever receive None where a real ID is expected.
 """
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.core.models import Document
-from app.ingestion.pipeline import _chunk_embed_store
+from app.ingestion.pipeline import _chunk_embed_store, _populate_graph
+
+
+@pytest.fixture(autouse=True)
+def _no_real_graph_store():
+    """
+    Keeps the pre-existing tests in this file (which don't care about graph
+    behavior) from ever touching a real Neo4j driver now that
+    _chunk_embed_store() calls _populate_graph() on every run. Tests that
+    specifically exercise _populate_graph() override this with their own
+    explicit patch of GraphStore.
+    """
+    with patch("app.ingestion.pipeline.GraphStore") as mock_cls:
+        mock_cls.return_value = MagicMock()
+        yield mock_cls
 
 
 def _make_mock_db(assign_id_on_flush: str = "fake-doc-id-123"):
@@ -158,3 +174,137 @@ def test_chunk_embed_store_sets_status_pending_and_commits(mock_embed_texts, moc
     assert result.status == "pending"
     assert result.raw_text == "word " * 50
     db.commit.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Graph wiring: entity extraction -> GraphStore, called from
+# _chunk_embed_store() so Neo4j actually gets populated during ingestion
+# (previously extract.py/build.py existed but nothing in the ingestion path
+# called them - see Friday checkpoint notes).
+# ---------------------------------------------------------------------------
+
+@patch("app.ingestion.pipeline.extract_relationships")
+@patch("app.ingestion.pipeline.extract_entities")
+@patch("app.ingestion.pipeline.GraphStore")
+def test_populate_graph_upserts_document_entities_and_relationships(
+    mock_graph_store_cls, mock_extract_entities, mock_extract_relationships,
+):
+    mock_store = MagicMock()
+    mock_graph_store_cls.return_value = mock_store
+    mock_extract_entities.return_value = [{"text": "Python", "label": "TECH"}]
+    mock_extract_relationships.return_value = [
+        {"source": "Python", "target": "FastAPI", "relation": "co_occurs_with", "context": "..."}
+    ]
+
+    document = Document(title="Doc", source_type="markdown", source_uri="test")
+    document.id = "doc-1"
+
+    _populate_graph(document, "Python and FastAPI are used together.")
+
+    mock_store.upsert_document_node.assert_called_once_with(
+        document_id="doc-1", title="Doc", source_type="markdown",
+    )
+    mock_extract_entities.assert_called_once_with("Python and FastAPI are used together.")
+    mock_store.upsert_entities.assert_called_once_with(
+        "doc-1", [{"text": "Python", "label": "TECH"}],
+    )
+    mock_extract_relationships.assert_called_once_with(
+        "Python and FastAPI are used together.", [{"text": "Python", "label": "TECH"}],
+    )
+    mock_store.upsert_relationships.assert_called_once_with(
+        [{"source": "Python", "target": "FastAPI", "relation": "co_occurs_with", "context": "..."}]
+    )
+    mock_store.close.assert_called_once()
+
+
+@patch("app.ingestion.pipeline.extract_relationships")
+@patch("app.ingestion.pipeline.extract_entities")
+@patch("app.ingestion.pipeline.GraphStore")
+def test_populate_graph_skips_entity_and_relationship_upserts_when_no_entities(
+    mock_graph_store_cls, mock_extract_entities, mock_extract_relationships,
+):
+    """A document with no recognizable entities still gets its Document
+    node created (so it's queryable in the graph), but shouldn't call
+    upsert_entities/extract_relationships with an empty list."""
+    mock_store = MagicMock()
+    mock_graph_store_cls.return_value = mock_store
+    mock_extract_entities.return_value = []
+
+    document = Document(title="Doc", source_type="markdown", source_uri="test")
+    document.id = "doc-2"
+
+    _populate_graph(document, "no named entities here")
+
+    mock_store.upsert_document_node.assert_called_once()
+    mock_store.upsert_entities.assert_not_called()
+    mock_extract_relationships.assert_not_called()
+    mock_store.close.assert_called_once()
+
+
+@patch("app.ingestion.pipeline.extract_entities")
+@patch("app.ingestion.pipeline.GraphStore")
+def test_populate_graph_swallows_exceptions_and_still_closes_store(
+    mock_graph_store_cls, mock_extract_entities,
+):
+    """A Neo4j failure (e.g. the container still restarting) must not
+    propagate out of _populate_graph and fail an otherwise-successful
+    ingestion - and the driver must still be closed."""
+    mock_store = MagicMock()
+    mock_store.upsert_document_node.side_effect = RuntimeError("neo4j unavailable")
+    mock_graph_store_cls.return_value = mock_store
+
+    document = Document(title="Doc", source_type="markdown", source_uri="test")
+    document.id = "doc-3"
+
+    _populate_graph(document, "some text")  # must not raise
+
+    mock_extract_entities.assert_not_called()
+    mock_store.close.assert_called_once()
+
+
+@patch("app.ingestion.pipeline._populate_graph")
+@patch("app.ingestion.pipeline.upsert_chunks")
+@patch("app.ingestion.pipeline.embed_texts")
+def test_chunk_embed_store_calls_populate_graph_with_full_text(
+    mock_embed_texts, mock_upsert_chunks, mock_populate_graph,
+):
+    """_populate_graph() must run on the full raw document text, not the
+    embedding chunks - chunk boundaries would fragment sentences and
+    undercount/duplicate entities and relationships."""
+    mock_embed_texts.return_value = [[0.1, 0.2], [0.3, 0.4]]
+    mock_upsert_chunks.return_value = ["vec-id-1", "vec-id-2"]
+
+    db = _make_mock_db(assign_id_on_flush="fake-doc-id-789")
+    document = Document(title="Doc", source_type="markdown", source_uri="test")
+    full_text = "word " * 2000  # long enough to span multiple chunks
+
+    result = _chunk_embed_store(db, document, full_text)
+
+    mock_populate_graph.assert_called_once_with(result, full_text)
+    # sanity: this is genuinely more than one chunk, so the test would be
+    # meaningless (couldn't distinguish full text from chunk text) otherwise
+    from app.ingestion.chunking import chunk_text
+    assert len(chunk_text(full_text)) > 1
+
+
+@patch("app.ingestion.pipeline._populate_graph")
+@patch("app.ingestion.pipeline.upsert_chunks")
+@patch("app.ingestion.pipeline.embed_texts")
+def test_chunk_embed_store_calls_populate_graph_after_commit(
+    mock_embed_texts, mock_upsert_chunks, mock_populate_graph,
+):
+    """Graph population must happen after the Postgres/ChromaDB commit,
+    so a Neo4j-side failure can never roll back a successful ingestion."""
+    mock_embed_texts.return_value = [[0.1, 0.2]]
+    mock_upsert_chunks.return_value = ["vec-id-1"]
+
+    db = _make_mock_db()
+    document = Document(title="Doc", source_type="markdown", source_uri="test")
+
+    def _assert_committed_already(*a, **k):
+        db.commit.assert_called_once()
+    mock_populate_graph.side_effect = _assert_committed_already
+
+    _chunk_embed_store(db, document, "word " * 50)
+
+    mock_populate_graph.assert_called_once()

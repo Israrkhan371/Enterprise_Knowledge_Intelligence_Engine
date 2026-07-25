@@ -32,6 +32,12 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 RUN python -m nltk.downloader -d /usr/local/share/nltk_data \
     punkt punkt_tab averaged_perceptron_tagger averaged_perceptron_tagger_eng
 
+# Pre-download the spaCy NER model at build time, same reasoning as the NLTK
+# step above: app/graph/extract.py loads "en_core_web_sm" on first use, and
+# without pre-fetching it here that first entity-extraction call would fail
+# outright (no internet fallback assumed at runtime) instead of just being slow.
+RUN python -m spacy download en_core_web_sm
+
 # Pre-download unstructured's YOLOX layout-detection model (~217MB) at build
 # time, the same way — otherwise the first real load_pdf(strategy="hi_res")
 # call at runtime pauses for 1-2 minutes to fetch it, and since it's cached

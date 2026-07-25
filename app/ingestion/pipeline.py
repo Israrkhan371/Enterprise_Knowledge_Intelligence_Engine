@@ -20,18 +20,18 @@ def _populate_graph(document: Document, text: str) -> None:
     the embedding chunks - see hybrid architecture note below) and upserts
     the result into Neo4j.
 
-    Hybrid architecture: chunk-level text feeds embeddings/RAG (above),
-    while full-document text feeds NER/graph here. Chunking is tuned for
+    Hybrid architecture: chunk-level text feeds embeddings/RAG, while
+    full-document text feeds NER/graph here. Chunking is tuned for
     retrieval context (800 words, 120 overlap), which would fragment
     entities and sentences across boundaries and undercount/duplicate
     relationships if reused for NER - so this runs on the whole document
     in one pass instead of per-chunk.
 
     Called after the Postgres/ChromaDB writes are committed, and never
-    raises: a Neo4j hiccup (or the container still being up mid-restart,
-    same class of issue as the startup race fixed in main.py) shouldn't
-    fail an otherwise-successful ingestion. Failures are logged so they're
-    visible without blocking the document from reaching "pending".
+    raises: a Neo4j hiccup (or the container still being up mid-restart)
+    shouldn't fail an otherwise-successful ingestion. Failures are logged
+    so they're visible without blocking the document from reaching
+    "pending".
     """
     store = GraphStore()
     try:
@@ -71,17 +71,15 @@ def _chunk_embed_store(db: Session, document: Document, text: str) -> Document:
     # document.id stays None through the entire chunk/embed/store
     # sequence below, and ChromaDB's metadata validation then rejects
     # None outright ("Expected metadata value to be a str, int, float or
-    # bool, got None"). Found via manual end-to-end testing — the
-    # embedder and vector_store unit tests both passed in isolation
-    # because they used a hardcoded string document_id, which masked
-    # this integration bug completely; only calling the real pipeline
-    # function end-to-end surfaced it. flush() (not commit()) assigns
-    # the primary key without ending the transaction, so a failure later
-    # in this function can still be rolled back by the caller.
+    # bool, got None"). flush() (not commit()) assigns the primary key
+    # without ending the transaction, so a failure later in this function
+    # can still be rolled back by the caller.
     db.add(document)
     db.flush()
 
     document.raw_text = text
+
+    # --- Chunk-level AI (embeddings -> vector store, for semantic/hybrid RAG) ---
     chunks = chunk_text(text)
 
     embeddings = embed_texts(chunks)

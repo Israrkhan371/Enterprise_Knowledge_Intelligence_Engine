@@ -2,6 +2,18 @@ import spacy
 
 _nlp = None
 
+# Entity types worth keeping for a technology/skill/people knowledge graph.
+# Excludes noisy spaCy categories that aren't real graph entities: DATE,
+# TIME, MONEY, CARDINAL, ORDINAL, PERCENT, QUANTITY, DURATION.
+RELEVANT_LABELS = {
+    "ORG",
+    "PERSON",
+    "PRODUCT",
+    "GPE",
+    "LANGUAGE",
+    "NORP",
+}
+
 
 def get_nlp():
     global _nlp
@@ -13,7 +25,11 @@ def get_nlp():
 def extract_entities(text: str) -> list[dict]:
     nlp = get_nlp()
     doc = nlp(text)
-    return [{"text": ent.text, "label": ent.label_} for ent in doc.ents]
+    return [
+        {"text": ent.text, "label": ent.label_}
+        for ent in doc.ents
+        if ent.label_ in RELEVANT_LABELS
+    ]
 
 
 def extract_relationships(text: str, entities: list[dict]) -> list[dict]:

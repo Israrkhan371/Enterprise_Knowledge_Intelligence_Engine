@@ -25,8 +25,15 @@ if not hasattr(_pdfparser, "PSSyntaxError"):
 
 def load_pdf(path: str) -> str:
     from unstructured.partition.pdf import partition_pdf
+    from unstructured.documents.elements import Title
+
     elements = partition_pdf(filename=path, strategy="hi_res")
-    return "\n".join(str(e) for e in elements)
+
+    # Exclude Title elements from the text that feeds embeddings and NER.
+    # Headings glued directly onto body text (e.g. "Parental Leave\nPrimary
+    # caregivers receive...") get misread by spaCy as ORG entities, and
+    # pollute chunk boundaries with short heading-only chunks.
+    return "\n\n".join(str(e) for e in elements if not isinstance(e, Title))
 
 
 def load_docx(path: str) -> str:

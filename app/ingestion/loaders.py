@@ -38,8 +38,31 @@ def load_pdf(path: str) -> str:
 
 def load_docx(path: str) -> str:
     from unstructured.partition.docx import partition_docx
+    from unstructured.documents.elements import Title, Table
+
     elements = partition_docx(filename=path)
-    return "\n".join(str(e) for e in elements)
+
+    parts = []
+    for el in elements:
+        if isinstance(el, (Title, Table)):
+            continue
+        text = str(el).strip()
+        if not text:
+            continue
+        if text[-1] not in ".!?:":
+            text += "."
+        parts.append(text)
+
+    filtered = "\n\n".join(parts)
+
+    # Safety net: if filtering out Title/Table elements leaves nothing
+    # (or almost nothing) — e.g. a short document where unstructured's
+    # heuristic misclassifies the entire body as a Title — fall back to
+    # the unfiltered text rather than silently losing all content.
+    if len(filtered.strip()) < 20:
+        return "\n\n".join(str(e) for e in elements if str(e).strip())
+
+    return filtered
 
 
 def load_markdown(path: str) -> str:

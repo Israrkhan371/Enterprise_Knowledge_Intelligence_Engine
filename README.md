@@ -59,6 +59,15 @@ mapped to each requirement.
 
 - **Source loaders**: PDF and docx are implemented and manually verified
   against real files (`app/ingestion/loaders.py`) — verified 2026-07-16.
+  Both exclude `Title` elements from the text fed to embeddings/NER, since
+  section headings glued directly onto body text were getting misread as
+  ORG entities (e.g. "Business Problem" tagged as an organization);
+  `load_docx` also excludes `Table` elements for the same reason (table
+  cell values like "Business Value" from an evaluation-criteria table were
+  showing up as fake entities), with a fallback to unfiltered text if
+  filtering would otherwise leave a document empty (protects short
+  documents where `unstructured` misclassifies the entire body as a
+  Title).
   Markdown and code (`load_code()`) are implemented and covered by
   automated tests, along with GitHub, meeting notes, transcripts, and blog
   loaders (`tests/test_loaders.py`, 25 passed/1 skipped, verified
@@ -77,9 +86,47 @@ mapped to each requirement.
 - **Keyword search** uses Postgres full-text search rather than standing up
   Elasticsearch/OpenSearch, to keep infra light; swap in `app/search/keyword.py`
   if you need BM25-grade ranking at larger scale.
-- **Relationship extraction** starts as sentence-level co-occurrence
-  (`app/graph/extract.py`) — the noted upgrade path is an LLM-based relation
-  labeler once you have ingestion volume to justify the extra latency/cost.
+- **Entity/relationship extraction and graph population** are implemented
+  and confirmed wired end-to-end, not just present as standalone modules:
+  `_populate_graph()` in `app/ingestion/pipeline.py` runs after every
+  ingestion's Postgres/ChromaDB commit, calling `extract_entities()` /
+  `extract_relationships()` (`app/graph/extract.py`, spaCy NER +
+  sentence-level co-occurrence) and writing to Neo4j via `GraphStore`.
+  Verified live via real document uploads across 8 source types (pdf,
+  docx, markdown, code, meeting_notes, transcript, db_schema, blog/lms) —
+  confirmed with before/after Postgres and Neo4j row counts, not just
+  passing tests.
+  Initial entity extraction was noisy; found and fixed via manual
+  end-to-end testing rather than assumed correct: spaCy's default labels
+  included non-entity categories (DATE/MONEY/TIME/CARDINAL) polluting the
+  graph, now filtered to a relevant-label allowlist; a technology
+  gazetteer (`entity_ruler`) was added to catch terms the base model
+  misses or merges (e.g. "Rust", "PostgreSQL", "Python and Kubernetes"
+  as one span); leading articles and bare adjectival demonyms (e.g. "the
+  United States", "European") are stripped; a stoplist removes SQL/DDL
+  syntax fragments and generic role labels (TABLE, DEFAULT, CTO,
+  Attendees) that NER mistags as entities; gazetteer matches are
+  case-canonicalized so "chromadb" and "ChromaDB" collapse to one node;
+  and partial person names within a single document (e.g. "Priya
+  Chandrasekaran" then later just "Chandrasekaran") are merged into one
+  entity. All fixes are covered by the existing test suite plus manual
+  verification against real documents.
+  Known, deliberately out-of-scope limitations: entity resolution does
+  **not** span across separate documents — the same person named
+  differently in two different uploads currently becomes two graph
+  nodes; fixing this needs a fuzzy/LLM-based matching step against
+  existing graph entities and carries real false-positive risk (merging
+  two different people who share a surname), so it's left as a Week 2+
+  item rather than rushed. NER also still produces some noise on
+  spec/requirement-style documents where bullet-list feature names
+  (e.g. "API Documentation", "Hybrid Search") get misread as named
+  entities — a general limitation of off-the-shelf NER on this document
+  *type*, not a bug in the extraction code, noted here rather than
+  silently left undocumented.
+  The noted upgrade path for relationship extraction specifically is an
+  LLM-based relation labeler once you have ingestion volume to justify
+  the extra latency/cost — sentence-level co-occurrence is the deliberate
+  MVP choice for now.
 - **Bonus feature implemented:** AI Citation Verification (`app/rag/citation_check.py`)
   and Knowledge Gap Detection (`app/rag/intelligence.py::detect_knowledge_gaps`) —
   both reuse infrastructure already built for the core requirements.

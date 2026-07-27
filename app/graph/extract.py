@@ -1,3 +1,4 @@
+import re
 import spacy
 
 _nlp = None
@@ -16,6 +17,10 @@ TECH_TERMS = [
     "Redis", "MongoDB", "AWS", "Azure", "GCP", "Terraform", "Node.js",
 ]
 
+# Leading articles that occasionally get included in GPE/NORP spans by spaCy
+# (e.g. "the United States"). Stripped for cleaner graph node names.
+_LEADING_ARTICLE = re.compile(r"^(the|a|an)\s+", re.IGNORECASE)
+
 
 def get_nlp():
     global _nlp
@@ -24,8 +29,6 @@ def get_nlp():
         ruler = nlp.add_pipe(
             "entity_ruler", after="ner", config={"overwrite_ents": True}
         )
-        # Match case-insensitively on token text (LOWER), token-by-token,
-        # so multi-word terms like "NVIDIA Jetson" still match correctly.
         patterns = [
             {"label": "TECH", "pattern": [{"LOWER": w.lower()} for w in term.split()]}
             for term in TECH_TERMS
@@ -35,14 +38,43 @@ def get_nlp():
     return _nlp
 
 
+def _clean_entity_text(text: str) -> str:
+    return _LEADING_ARTICLE.sub("", text).strip()
+
+
 def extract_entities(text: str) -> list[dict]:
     nlp = get_nlp()
     doc = nlp(text)
-    return [
-        {"text": ent.text, "label": ent.label_}
-        for ent in doc.ents
-        if ent.label_ in RELEVANT_LABELS
-    ]
+    results = []
+    seen = set()
+
+    for ent in doc.ents:
+        if ent.label_ not in RELEVANT_LABELS:
+            continue
+
+        # Skip bare adjectival demonyms (e.g. "European" used as an adjective
+        # in "European sales") — these are technically valid NORP spans per
+        # spaCy's label definition, but aren't useful standalone graph nodes.
+        # A single-token NORP whose root is tagged ADJ is this pattern;
+        # multi-word or noun-headed NORP entities (e.g. "the French") still
+        # pass through fine.
+        if ent.label_ == "NORP" and len(ent) == 1 and ent.root.pos_ == "ADJ":
+            continue
+
+        cleaned = _clean_entity_text(ent.text)
+        if not cleaned:
+            continue
+
+        # Dedup after cleaning, in case stripping created a duplicate
+        # (e.g. "the United States" and "United States" both appearing)
+        key = (cleaned, ent.label_)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        results.append({"text": cleaned, "label": ent.label_})
+
+    return results
 
 
 def extract_relationships(text: str, entities: list[dict]) -> list[dict]:

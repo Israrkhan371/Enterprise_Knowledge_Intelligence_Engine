@@ -83,10 +83,20 @@ def _chunk_embed_store(db: Session, document: Document, text: str) -> Document:
     chunks = chunk_text(text)
 
     embeddings = embed_texts(chunks)
+
+    # Resolve the category *name* (not the raw category_id UUID) for
+    # ChromaDB metadata, since semantic_search()'s category_filter takes a
+    # human-readable string (e.g. "test-category"), not a UUID. document
+    # was already flushed above, so document.category triggers a normal
+    # SQLAlchemy relationship lookup within this session if category_id
+    # is set; stays None for uncategorized documents.
+    category_name = document.category.name if document.category_id else None
+
     vector_ids = upsert_chunks(
         document_id=document.id,
         chunks=chunks,
         embeddings=embeddings,
+        category=category_name,
     )
 
     for idx, (chunk, vec_id) in enumerate(zip(chunks, vector_ids)):

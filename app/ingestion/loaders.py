@@ -6,6 +6,54 @@ from the parsing library so you can change libraries without touching
 the rest of the ingestion flow.
 """
 from pathlib import Path
+import re
+
+_TRIPLE_QUOTE_RE = re.compile(r'("""|\'\'\')(.*?)\1', re.DOTALL)
+_BLOCK_COMMENT_RE = re.compile(r'/\*(.*?)\*/', re.DOTALL)
+_LINE_COMMENT_RE = re.compile(r'(?:^|\s)(?:#|//)\s?(.*)$', re.MULTILINE)
+
+
+def extract_code_comments(text: str) -> str:
+    """
+    Pulls out only the human-language content from source code - docstrings
+    and comments - for feeding into NER. Running entity extraction on raw
+    code produces noise: class names, exception identifiers, and other
+    CamelCase/code tokens get misread as proper nouns by general-purpose
+    NER (e.g. "GenerationError", "IGNORECASE" tagged as entities from a
+    real Python file). Comments and docstrings are where genuine
+    human-written references to real people, companies, and technologies
+    actually live in source code - everything else is syntax by
+    definition and can never be a real entity.
+
+    Deliberately does NOT affect what gets embedded/chunked for search -
+    full source code stays fully searchable, since developers legitimately
+    search by code content, not just comments. This only narrows what NER
+    sees, not what semantic_search can retrieve.
+
+    Best-effort across languages: handles Python triple-quoted docstrings,
+    '#'/'//' line comments, and '/* */' block comments. Doesn't parse a
+    real AST, so it can't be perfect (e.g. a '#' inside a string literal
+    would be misread as a comment start) - acceptable tradeoff for what
+    this narrows, since worst case is a little extra text reaching NER,
+    not incorrect embeddings or broken ingestion.
+    """
+    parts = []
+
+    for match in _TRIPLE_QUOTE_RE.finditer(text):
+        parts.append(match.group(2))
+    remaining = _TRIPLE_QUOTE_RE.sub(" ", text)
+
+    for match in _BLOCK_COMMENT_RE.finditer(remaining):
+        parts.append(match.group(1))
+    remaining = _BLOCK_COMMENT_RE.sub(" ", remaining)
+
+    for match in _LINE_COMMENT_RE.finditer(remaining):
+        line = match.group(1).strip()
+        if line:
+            parts.append(line)
+
+    return "\n".join(p.strip() for p in parts if p.strip())
+
 
 # --- Compatibility shim -----------------------------------------------
 # pdfminer.six >= 20260107 renamed the re-export in pdfminer.pdfparser

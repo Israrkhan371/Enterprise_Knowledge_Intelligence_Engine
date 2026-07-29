@@ -29,8 +29,8 @@ class CompareRequest(BaseModel):
 
 
 @router.get("/search/semantic")
-def search_semantic(q: str, top_k: int = 10):
-    return semantic_search(q, top_k=top_k)
+def search_semantic(q: str, top_k: int = 10, category_filter: str | None = None):
+    return semantic_search(q, top_k=top_k, category_filter=category_filter)
 
 
 @router.get("/search/keyword")

@@ -75,14 +75,36 @@ mapped to each requirement.
   (one per file) instead of `str` like every other loader, so it is
   **deliberately excluded** from `SOURCE_LOADERS` and routed instead through
   `ingest_github_repo()` in `pipeline.py`, which fans each file out into its
-  own `Document` row. It also recurses into subfolders (depth-guarded, with
-  a directory exclusion list for `.git`/`node_modules`/`__pycache__`/etc.) —
-  an earlier version only pulled root-level files, caught via manual testing
-  against the real EKIE repo and fixed 2026-07-18 (re-verified: 38 files
-  across every subfolder, no excluded dirs leaked in). Add new single-file
-  formats by registering a function in `SOURCE_LOADERS`; multi-file sources
-  like GitHub should follow the `ingest_github_repo()` fan-out pattern
-  instead.
+  own `Document` row. **There is currently no REST/admin endpoint that calls
+  `ingest_github_repo()`** — it must be invoked directly in Python
+  (`docker exec -it ekie-api python`) until an admin route is added; every
+  other loader is reachable via `POST /admin/documents/upload`. It also
+  recurses into subfolders (depth-guarded, with a directory exclusion list
+  for `.git`/`node_modules`/`__pycache__`/etc.) — an earlier version only
+  pulled root-level files, caught via manual testing against the real EKIE
+  repo and fixed 2026-07-18 (re-verified: 38 files across every subfolder,
+  no excluded dirs leaked in). Add new single-file formats by registering a
+  function in `SOURCE_LOADERS`; multi-file sources like GitHub should
+  follow the `ingest_github_repo()` fan-out pattern instead.
+- **API docs, DB schema, and LMS loaders** (`load_api_docs`, `load_db_schema`,
+  `load_lms`) were added 2026-07-21, bringing `tests/test_loaders.py` to 35
+  passed/1 skipped (36 collected). `load_api_docs` flattens an
+  OpenAPI/Swagger JSON spec into prose (`METHOD /path — summary` plus
+  params/response descriptions) rather than embedding raw JSON syntax.
+  `load_db_schema` keeps `CREATE TABLE`/`ALTER TABLE`/`CREATE INDEX`/comment
+  statements from a `.sql` dump but strips `INSERT INTO` rows and
+  `COPY ... FROM stdin` data blocks, so real row data can never leak into
+  the vector store — only schema *shape* is ever embedded. `load_lms`
+  handles both a SCORM `.zip` package (concatenates every HTML content file
+  inside, skips `imsmanifest.xml` packaging metadata) and a single exported
+  `.html` file. All three read with `utf-8-sig` rather than `utf-8`, since
+  files saved via Windows tools (e.g. PowerShell's `Out-File -Encoding
+  utf8`) write a UTF-8 BOM that `json.loads()` chokes on
+  (`load_api_docs` was the loader that surfaced this, since it's the only
+  one doing strict JSON parsing — the others tolerated the stray BOM
+  character silently). Verified live through the real upload endpoint for
+  all three, not just via automated tests, including the BOM case
+  specifically (2026-07-22).
 - **Keyword search** uses Postgres full-text search rather than standing up
   Elasticsearch/OpenSearch, to keep infra light; swap in `app/search/keyword.py`
   if you need BM25-grade ranking at larger scale.
@@ -172,6 +194,33 @@ re-discovers them the hard way on a fresh machine:
    healthcheck and `api` depends on `neo4j: condition: service_healthy`;
    `app/main.py` also retries `init_schema()` with backoff as a safety net
    for running `api` outside that ordering (e.g. restarting it alone).
+6. **The ChromaDB Python client and server image must stay on the same
+   version.** `requirements-lock.txt` pins `chromadb==0.5.23`, but the
+   `chromadb` service in `docker-compose.yml` had drifted to the older
+   `chromadb/chroma:0.5.15` server image. The 0.5.23 client added a
+   startup auth-identity handshake (`GET /auth/identity`) that the 0.5.15
+   server doesn't expose, so *every* Chroma operation (upsert, query) fails
+   with a `404 Not Found` wrapped in a confusing
+   `ValueError: {"detail":"Not Found"}` — the traceback points at
+   `get_user_identity()`, not at anything your code actually called, which
+   makes it easy to mistake for a config/networking problem. Fixed by
+   bumping the compose image to `chromadb/chroma:0.5.23` to match the
+   client. If you ever bump `chromadb` in `requirements-lock.txt`, bump the
+   compose image tag to match in the same change.
+7. **FastAPI silently drops query/form parameters that aren't declared in
+   the route function's signature — it does not error.** This bit us
+   twice: `ingest_github_repo()` has no admin route at all yet (see the
+   GitHub loader note above), and `semantic_search()`'s `category_filter`
+   parameter was fully implemented, correctly applied, and covered by
+   passing unit tests — but the `/search/semantic` route handler's own
+   signature never declared `category_filter`, so it was accepted and
+   silently discarded from every real HTTP request. Filtered and
+   unfiltered queries returned identical results with no error anywhere in
+   the logs. The lesson: when a search/pipeline function gains a new
+   parameter, grep for every route that calls it and confirm the parameter
+   is threaded all the way from the route signature through — a passing
+   unit test on the underlying function proves nothing about whether the
+   HTTP layer actually exposes it.
 
 ## Running tests
 

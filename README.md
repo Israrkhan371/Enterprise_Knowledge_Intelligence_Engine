@@ -123,6 +123,59 @@ mapped to each requirement.
   `/` as part of the token, so a query for a path-like term (e.g. an
   OpenAPI path segment) needs the slash included to match — confirmed via
   the `/flangeburst987` case during that verification pass.
+<<<<<<< HEAD
+- **Hybrid search** (`app/search/hybrid.py`) fuses semantic + keyword results
+  via reciprocal rank fusion. Found and fixed a real bug 2026-07-30: RRF
+  fused on `"id"`, but `semantic_search()`'s `"id"` (a ChromaDB vector id
+  like `"doc-1::abc"`) and `keyword_search()`'s `"id"` (the Postgres
+  `document_chunks` primary key) are two disjoint id spaces for the *same*
+  chunk — so a chunk ranked well by both methods could never be recognized
+  as the same item and boosted, silently defeating the entire point of RRF
+  fusion (it degraded to "semantic results, then keyword results,
+  re-sorted"). Fixed by having `keyword_search()` also return
+  `embedding_id` (the value `semantic_search()` already calls `"id"`) and
+  fusing on that shared value instead, with a collision-safe fallback key
+  for chunks that haven't been embedded yet. Also fixed RRF's payload
+  merge, which previously let the second list's dict silently overwrite
+  the first's fields on a match (losing e.g. `distance`/`metadata` from a
+  semantic hit). `category_filter` added to `hybrid_search()`/
+  `/search/hybrid` for parity with `/search/semantic`. Covered by
+  `tests/test_hybrid.py` (9 tests, mocked).
+- **Metadata search** (`app/search/metadata.py`, `GET /search/metadata`) —
+  the missing piece flagged in the Week 2 Thursday tracker row: filters
+  documents by category/source_type/status/date range rather than by
+  textual relevance to a query (that's what semantic/keyword/hybrid search
+  are for). Covered by `tests/test_metadata.py` (7 integration tests
+  against a real, rolled-back Postgres transaction).
+- **Context-aware query rewriting** (`app/search/context_aware.py::
+  rewrite_query`, used by `/ask`) is now wired to a real Gemini call (same
+  client pattern as `app/rag/generate.py`) instead of the previous stub
+  that always returned the query unchanged regardless of conversation
+  history. Falls back to the original query on any API error rather than
+  raising, so a rewrite failure can't break `/ask`. Covered by
+  `tests/test_context_aware.py` (7 tests, mocked) and manually verified
+  live (2026-07-30): `rewrite_query("what are its main dependencies?",
+  [{"role": "user", "content": "What is FastAPI?"}])` returned `"What are
+  FastAPI's main dependencies?"` — a genuinely rewritten, pronoun-resolved
+  query, confirming the LLM call actually executes rather than silently
+  falling back. That check also surfaced a separate, unrelated problem:
+  `GEMINI_MODEL=gemini-2.5-flash` (the default in `.env.example`/
+  `app/core/config.py`) was rejected by the live API; fixed by switching
+  the default to `GEMINI_MODEL=gemini-flash-latest`, confirmed working via
+  a direct `generate_content` call returning real text.
+- **RAG citation mapping** (`app/rag/generate.py`, `app/rag/
+  citation_check.py`) — found and fixed a related bug while auditing
+  hybrid search: `build_context_block()`'s `hit.get("document_id",
+  hit.get("id"))` fallback silently substituted the ChromaDB vector id for
+  the real document id in citations sourced from semantic-only hits,
+  because `semantic_search()` never exposed `document_id` at the top level
+  (only nested in `metadata`). Fixed in `app/search/semantic.py`. Neither
+  `generate.py` nor `citation_check.py` had any tests before this session;
+  now covered by `tests/test_generate.py` (6 tests) and
+  `tests/test_citation_check.py` (7 tests), both mocked. Citation
+  *accuracy* against a real query set is still unmeasured — see Next
+  steps.
+
 - **Entity/relationship extraction and graph population** are implemented
   and confirmed wired end-to-end, not just present as standalone modules:
   `_populate_graph()` in `app/ingestion/pipeline.py` runs after every
@@ -253,6 +306,13 @@ docker exec -it ekie-api pytest tests/ -v
 ## Next steps
 
 1. Fill in `app/evaluation/eval_set.json` with real Q&A pairs and their correct
-   source document IDs, then hit `POST /api/v1/evaluation/run`.
+   source document IDs, then hit `POST /api/v1/evaluation/run` to actually
+   measure RAG/citation accuracy — `/ask` + `citation_check.py` are
+   implemented and unit-tested (2026-07-30) but accuracy itself is still
+   unmeasured against a real query set.
 2. Wire `app/search/context_aware.py::rewrite_query` to a live LLM call —
    it's stubbed to a pass-through for now.
+3. Add `tests/fixtures/sample.pdf` so `test_load_pdf_on_real_sample_if_present`
+   (`test_loaders.py`) and `test_keyword_search_finds_pdf_content`
+   (`test_keyword_search_integration.py`) can run instead of skipping.
+

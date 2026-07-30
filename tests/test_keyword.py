@@ -23,12 +23,15 @@ def _make_mock_db(rows):
     return db
 
 
-def _fake_row(id_="chunk-1", document_id="doc-1", text="some chunk text", rank=0.5):
+
+def _fake_row(id_="chunk-1", document_id="doc-1", text="some chunk text", rank=0.5, embedding_id="vec-1"):
     row = MagicMock()
     row.id = id_
     row.document_id = document_id
     row.text = text
     row.rank = rank
+
+    row.embedding_id = embedding_id
     return row
 
 
@@ -52,7 +55,11 @@ def test_keyword_search_defaults_top_k_to_ten():
 
 def test_keyword_search_shapes_results_correctly():
     db = _make_mock_db(rows=[
-        _fake_row(id_="chunk-1", document_id="doc-1", text="Pinecone is a vector database.", rank=0.061),
+
+        _fake_row(
+            id_="chunk-1", document_id="doc-1", text="Pinecone is a vector database.",
+            rank=0.061, embedding_id="doc-1::vec-abc",
+        ),
     ])
 
     results = keyword_search(db, "Pinecone", top_k=3)
@@ -61,12 +68,27 @@ def test_keyword_search_shapes_results_correctly():
         {
             "id": "chunk-1",
             "document_id": "doc-1",
+            "embedding_id": "doc-1::vec-abc",
             "text": "Pinecone is a vector database.",
             "rank": 0.061,
         }
     ]
 
+def test_keyword_search_passes_through_none_embedding_id():
+    """
+    A chunk that hasn't been embedded yet has embedding_id=NULL in Postgres.
+    keyword_search() must pass that through as None rather than coercing it
+    (e.g. to an empty string), since hybrid_search() relies on being able to
+    distinguish "no embedding yet" from a real embedding_id when fusing.
+    """
+    db = _make_mock_db(rows=[_fake_row(embedding_id=None)])
 
+    results = keyword_search(db, "query")
+
+    assert results[0]["embedding_id"] is None
+
+
+>>>>>>> 1302789 (Week 2 Wed-Fri: hybrid search fusion fix, metadata search, live-wired context-aware rewriting, citation-mapping fix)
 def test_keyword_search_returns_empty_list_for_no_matches():
     db = _make_mock_db(rows=[])
 

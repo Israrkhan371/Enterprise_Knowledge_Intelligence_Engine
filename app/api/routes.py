@@ -11,7 +11,12 @@ from app.search.context_aware import rewrite_query
 from app.rag.generate import generate_answer
 from app.rag.citation_check import verify_citations
 from app.rag.intelligence import compare_documents, summarize_document
-from app.graph.queries import get_technology_map, get_skill_dependencies, recommend_learning_path
+from app.graph.queries import (
+    explain_relationship,
+    get_skill_dependencies,
+    get_technology_map,
+    recommend_learning_path,
+)
 from app.evaluation.eval import run_evaluation
 
 router = APIRouter(tags=["knowledge"])
@@ -83,8 +88,15 @@ def technology_map(entity_label: str = "TECH"):
 
 
 @router.get("/graph/skill-dependencies")
-def skill_dependencies(skill: str):
+def skill_dependencies(skill: str | None = None):
     return get_skill_dependencies(skill)
+
+
+@router.get("/graph/relationships/explain")
+def relationship_explanation(source: str, target: str):
+    """Traceable-source explanation for one edge: relation type, confidence,
+    reasoning and evidence — see app/graph/relationships.py."""
+    return explain_relationship(source, target)
 
 
 @router.get("/graph/learning-recommendations")

@@ -123,10 +123,92 @@ mapped to each requirement.
   entities — a general limitation of off-the-shelf NER on this document
   *type*, not a bug in the extraction code, noted here rather than
   silently left undocumented.
-  The noted upgrade path for relationship extraction specifically is an
-  LLM-based relation labeler once you have ingestion volume to justify
-  the extra latency/cost — sentence-level co-occurrence is the deliberate
-  MVP choice for now.
+  The upgrade path for relationship extraction described below (multi-
+  granularity co-occurrence + confidence scoring) replaces the sentence-level
+  `co_occurs_with` MVP mentioned above; see the next bullet.
+- **Technology maps & skill dependencies from entity co-occurrence**
+  (`app/graph/relationships.py`, `app/graph/knowledge_base.py`) turn the raw
+  co-occurrence edges above into scored, typed, explainable relationships —
+  the actual Week 2 Monday deliverable, not just an endpoint that returns
+  unscored graph edges (which is what existed before this pass).
+  `extract_cooccurrences()` records co-occurrence at three granularities
+  (sentence/paragraph/document, closest = highest confidence) and tags each
+  with textual evidence signals (import statements, package files, deployment
+  references, connection references, explicit dependency language).
+  `infer_relationship()` scores every edge from two sources: a small curated
+  baseline of well-known technology facts (`KNOWN_RELATIONS` — e.g. Python is
+  a prerequisite of FastAPI, independent of what any given document says) and
+  the actual observed frequency/evidence, which adjusts confidence up or down
+  from that baseline (or is the only signal for pairs with no curated entry).
+  A relationship with only one weak co-occurrence and no real evidence is
+  deliberately downgraded to `RELATED_TO` rather than reported as a confident
+  `DEPENDS_ON` — rule-based, not assumed. `GET /graph/relationships/explain`
+  returns the full traceable breakdown (relation type, confidence 0-100,
+  reasoning, evidence list) for one edge; `GET /graph/technology-map` groups
+  edges into ecosystems, `GET /graph/skill-dependencies` orders `PREREQUISITE_OF`
+  edges into a learning path, cross-checked against a curated skill chain so an
+  inferred edge can't introduce a contradiction/cycle.
+  Verified so far: 87 tests covering confidence-scoring bounds, direction
+  canonicalization, weak-evidence demotion, ecosystem grouping, skill-chain
+  ordering, evidence-window scoping, and the co-occurrence idempotency guard
+  (below), all passing without needing Neo4j or the spaCy model except where
+  noted (`tests/test_graph_relationships.py`, `tests/test_graph_extract_evidence.py`,
+  `tests/test_graph_build.py`).
+  **Not yet verified:** live against a running Neo4j instance — the
+  accumulate-across-documents Cypher (`GraphStore.upsert_cooccurrence`) has
+  only been reasoned through and mock-tested, not executed for real. Left
+  deliberately open rather than faked; needs a real docker-compose run.
+
+  Two correctness bugs found during review were fixed and regression-tested
+  before this was considered done:
+  - **Evidence misattribution (fixed).** Evidence was originally detected
+    once per sentence/paragraph and applied to *every* entity pair in it —
+    e.g. an import statement about entity A would get wrongly credited to an
+    unrelated A-C pair. Sentence-level evidence is now scoped to a character
+    window around the specific pair (`extract._pair_evidence_window`).
+    Paragraph-level evidence detection was removed entirely rather than
+    patched further: testing showed a pair spanning two different sentences
+    in the same paragraph could still inherit evidence from an unrelated
+    third sentence sandwiched between them, and there's no reliable regex-only
+    way to rule that out. Paragraph/document granularity are now frequency-only
+    signals with no evidence claims attached — a real scope reduction, not a
+    silent gap. Properly solving evidence-for-cross-sentence-pairs needs actual
+    relation extraction (the LLM-based upgrade path already noted above), not
+    a better regex window.
+  - **Double-counting on reprocessing (fixed).** `upsert_cooccurrence` now
+    checks whether `document_id` is already in a pair's `supporting_documents`
+    before incrementing sentence/paragraph/document counters, so re-running
+    ingestion for the same document (retry, admin reprocess) no longer
+    inflates confidence. `evidence`/`supporting_documents`/
+    `supporting_github_repos` were already safe (set-union), only the raw
+    counts needed the guard.
+
+  Remaining known limitations — reviewed and deliberately left as documented
+  trade-offs rather than fixed, since they affect scale/optimization on a
+  sequential prototype rather than correctness of today's output:
+  - `upsert_cooccurrence` does a read-then-write across two separate Cypher
+    statements per entity pair, not one atomic transaction — safe under the
+    current sequential ingestion path, but would silently lose updates under
+    any concurrent writes to the same pair.
+  - Three Neo4j round trips per unique entity pair per document (MERGE, read,
+    write), looped in Python rather than batched — fine at current volume,
+    will need batching before large bulk repo ingests.
+  - Document-level co-occurrence (entities that never share a sentence or
+    paragraph) is uncapped O(n²) per document — a document mentioning 20
+    unrelated entities can generate ~190 weak pairs, adding graph noise with
+    no cap or pruning.
+  - For curated pairs, the relationship *type* always comes from
+    `KNOWN_RELATIONS`, not from what your documents actually say — only the
+    confidence score responds to observed evidence. Reasonable for
+    well-established tech facts, but means "traceable to source" isn't fully
+    true for that subset of edges.
+  - Confidence-scoring weights (granularity/evidence/multi-source bonuses)
+    are hand-tuned to produce sensible output on a couple of worked examples,
+    not calibrated against any labeled ground truth — a candidate for the
+    Week 3/4 evaluation framework rather than assumed correct.
+  - `get_technology_map`'s `limit` is applied after scoring every edge
+    returned by Neo4j, not in the Cypher query itself — wasteful once the
+    graph has thousands of edges.
 - **Bonus feature implemented:** AI Citation Verification (`app/rag/citation_check.py`)
   and Knowledge Gap Detection (`app/rag/intelligence.py::detect_knowledge_gaps`) —
   both reuse infrastructure already built for the core requirements.

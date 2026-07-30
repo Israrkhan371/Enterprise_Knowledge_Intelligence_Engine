@@ -183,17 +183,18 @@ def test_chunk_embed_store_sets_status_pending_and_commits(mock_embed_texts, moc
 # called them - see Friday checkpoint notes).
 # ---------------------------------------------------------------------------
 
-@patch("app.ingestion.pipeline.extract_relationships")
+@patch("app.ingestion.pipeline.extract_cooccurrences")
 @patch("app.ingestion.pipeline.extract_entities")
 @patch("app.ingestion.pipeline.GraphStore")
-def test_populate_graph_upserts_document_entities_and_relationships(
-    mock_graph_store_cls, mock_extract_entities, mock_extract_relationships,
+def test_populate_graph_upserts_document_entities_and_cooccurrences(
+    mock_graph_store_cls, mock_extract_entities, mock_extract_cooccurrences,
 ):
     mock_store = MagicMock()
     mock_graph_store_cls.return_value = mock_store
     mock_extract_entities.return_value = [{"text": "Python", "label": "TECH"}]
-    mock_extract_relationships.return_value = [
-        {"source": "Python", "target": "FastAPI", "relation": "co_occurs_with", "context": "..."}
+    mock_extract_cooccurrences.return_value = [
+        {"source": "Python", "target": "FastAPI", "granularity": "sentence",
+         "context": "...", "evidence": set()}
     ]
 
     document = Document(title="Doc", source_type="markdown", source_uri="test")
@@ -208,24 +209,26 @@ def test_populate_graph_upserts_document_entities_and_relationships(
     mock_store.upsert_entities.assert_called_once_with(
         "doc-1", [{"text": "Python", "label": "TECH"}],
     )
-    mock_extract_relationships.assert_called_once_with(
+    mock_extract_cooccurrences.assert_called_once_with(
         "Python and FastAPI are used together.", [{"text": "Python", "label": "TECH"}],
     )
-    mock_store.upsert_relationships.assert_called_once_with(
-        [{"source": "Python", "target": "FastAPI", "relation": "co_occurs_with", "context": "..."}]
-    )
+    mock_store.upsert_cooccurrence.assert_called_once()
+    args, _ = mock_store.upsert_cooccurrence.call_args
+    assert args[0] == "doc-1"
+    assert args[1] == "markdown"
+    assert args[2][("Python", "FastAPI")]["sentence_count"] == 1
     mock_store.close.assert_called_once()
 
 
-@patch("app.ingestion.pipeline.extract_relationships")
+@patch("app.ingestion.pipeline.extract_cooccurrences")
 @patch("app.ingestion.pipeline.extract_entities")
 @patch("app.ingestion.pipeline.GraphStore")
-def test_populate_graph_skips_entity_and_relationship_upserts_when_no_entities(
-    mock_graph_store_cls, mock_extract_entities, mock_extract_relationships,
+def test_populate_graph_skips_entity_and_cooccurrence_upserts_when_no_entities(
+    mock_graph_store_cls, mock_extract_entities, mock_extract_cooccurrences,
 ):
     """A document with no recognizable entities still gets its Document
     node created (so it's queryable in the graph), but shouldn't call
-    upsert_entities/extract_relationships with an empty list."""
+    upsert_entities/extract_cooccurrences with an empty list."""
     mock_store = MagicMock()
     mock_graph_store_cls.return_value = mock_store
     mock_extract_entities.return_value = []
@@ -237,7 +240,7 @@ def test_populate_graph_skips_entity_and_relationship_upserts_when_no_entities(
 
     mock_store.upsert_document_node.assert_called_once()
     mock_store.upsert_entities.assert_not_called()
-    mock_extract_relationships.assert_not_called()
+    mock_extract_cooccurrences.assert_not_called()
     mock_store.close.assert_called_once()
 
 

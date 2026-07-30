@@ -107,7 +107,22 @@ mapped to each requirement.
   specifically (2026-07-22).
 - **Keyword search** uses Postgres full-text search rather than standing up
   Elasticsearch/OpenSearch, to keep infra light; swap in `app/search/keyword.py`
-  if you need BM25-grade ranking at larger scale.
+  if you need BM25-grade ranking at larger scale. Backed by a GIN index
+  (`chunks_fts_idx` on `document_chunks`, declared in `app/core/models.py`
+  via `Index(..., postgresql_using="gin")` so `create_all()` creates it —
+  confirmed live via `pg_indexes`, added 2026-07-30). Covered by
+  `tests/test_keyword.py` (7 tests, mocked at the query level) and
+  `tests/test_keyword_search_integration.py` (11 tests: real loader → real
+  chunker → real Postgres write → `keyword_search()`, one per source type,
+  GitHub mocked to avoid a live network call; PDF is `@pytest.mark.skip`ed
+  pending a real `tests/fixtures/sample.pdf`, same as `test_loaders.py`'s
+  equivalent skip). Manually verified against real ingested content across
+  all 11 source types, including PDF and a real GitHub repo run through
+  the full `ingest_github_repo()` pipeline, not just `load_github_repo()`
+  (2026-07-30). Known limitation: Postgres's tokenizer treats a leading
+  `/` as part of the token, so a query for a path-like term (e.g. an
+  OpenAPI path segment) needs the slash included to match — confirmed via
+  the `/flangeburst987` case during that verification pass.
 - **Entity/relationship extraction and graph population** are implemented
   and confirmed wired end-to-end, not just present as standalone modules:
   `_populate_graph()` in `app/ingestion/pipeline.py` runs after every
@@ -239,7 +254,5 @@ docker exec -it ekie-api pytest tests/ -v
 
 1. Fill in `app/evaluation/eval_set.json` with real Q&A pairs and their correct
    source document IDs, then hit `POST /api/v1/evaluation/run`.
-2. Add a GIN index for Postgres full-text search (see comment in
-   `app/search/keyword.py`) before load-testing keyword/hybrid search.
-3. Wire `app/search/context_aware.py::rewrite_query` to a live LLM call —
+2. Wire `app/search/context_aware.py::rewrite_query` to a live LLM call —
    it's stubbed to a pass-through for now.

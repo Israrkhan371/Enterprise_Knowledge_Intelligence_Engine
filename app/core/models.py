@@ -1,9 +1,10 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, String, Text, DateTime, Boolean, ForeignKey, Float, Integer
+from sqlalchemy import Column, String, Text, DateTime, Boolean, ForeignKey, Float, Integer, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.core.database import Base
 
@@ -51,6 +52,18 @@ class DocumentChunk(Base):
     embedding_id = Column(String, nullable=True)  # id in the vector store
 
     document = relationship("Document", back_populates="chunks")
+
+    __table_args__ = (
+        # Backs app.search.keyword.keyword_search()'s to_tsvector/plainto_tsquery
+        # lookup. Without this, every keyword search does a sequential scan +
+        # on-the-fly tsvector build over the whole table. create_all() creates
+        # this automatically on Postgres; it's a no-op on other dialects.
+        Index(
+            "chunks_fts_idx",
+            func.to_tsvector("english", text),
+            postgresql_using="gin",
+        ),
+    )
 
 
 class User(Base):

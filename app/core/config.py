@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     chroma_collection: str = "ekie_documents"
 
     google_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-flash-latest"    
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
 
     mlflow_tracking_uri: str = "http://mlflow:5000"

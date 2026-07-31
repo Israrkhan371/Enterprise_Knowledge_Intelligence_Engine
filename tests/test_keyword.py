@@ -87,8 +87,6 @@ def test_keyword_search_passes_through_none_embedding_id():
 
     assert results[0]["embedding_id"] is None
 
-
->>>>>>> 1302789 (Week 2 Wed-Fri: hybrid search fusion fix, metadata search, live-wired context-aware rewriting, citation-mapping fix)
 def test_keyword_search_returns_empty_list_for_no_matches():
     db = _make_mock_db(rows=[])
 

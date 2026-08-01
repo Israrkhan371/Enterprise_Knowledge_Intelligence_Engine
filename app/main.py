@@ -12,7 +12,7 @@ from app.admin.routes import router as admin_router
 app = FastAPI(
     title="Enterprise Knowledge Intelligence Engine (EKIE)",
     description="Central AI intelligence layer over Ezitech's organizational knowledge.",
-    version="0.1.0",
+    version="0.2.0",
 )
 
 # Auto-create tables on startup for local dev.
@@ -52,4 +52,4 @@ app.mount("/metrics", make_asgi_app())
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "version": app.version}

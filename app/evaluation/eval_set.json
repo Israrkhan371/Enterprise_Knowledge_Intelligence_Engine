@@ -1,10 +1,202 @@
 [
   {
+    "category": "internship_case_studies",
     "query": "How do I set up the internship onboarding checklist?",
-    "relevant_document_ids": []
+    "relevant_document_titles": ["Intern Onboarding Checklist"]
   },
   {
+    "category": "internship_case_studies",
+    "query": "What is the duration and team size for the Enterprise Knowledge Intelligence Engine case study?",
+    "relevant_document_titles": ["Case Study - AI-007 Enterprise Knowledge Intelligence Engine"]
+  },
+  {
+    "category": "internship_case_studies",
+    "query": "What are the bonus challenges available for the EKIE case study?",
+    "relevant_document_titles": ["Case Study - AI-007 Enterprise Knowledge Intelligence Engine"]
+  },
+  {
+    "category": "internship_case_studies",
+    "query": "What deliverables are required for an EEF industry AI case study?",
+    "relevant_document_titles": ["Ezitech Engineering Framework Overview"]
+  },
+  {
+    "category": "internship_case_studies",
+    "query": "How is an intern's case study graded, and what is each evaluation criterion worth?",
+    "relevant_document_titles": ["Case Study - AI-007 Enterprise Knowledge Intelligence Engine"]
+  },
+  {
+    "category": "coding_standards",
     "query": "What is Ezitech's coding standard for Python projects?",
-    "relevant_document_ids": []
+    "relevant_document_titles": ["Ezitech Python Coding Standards"]
+  },
+  {
+    "category": "coding_standards",
+    "query": "What naming conventions should I use for variables and functions in Ezitech projects?",
+    "relevant_document_titles": ["Ezitech Python Coding Standards"]
+  },
+  {
+    "category": "coding_standards",
+    "query": "What is the required code review process before merging a pull request?",
+    "relevant_document_titles": ["SOP - Code Review Process"]
+  },
+  {
+    "category": "coding_standards",
+    "query": "Does Ezitech require type hints and docstrings on all Python functions?",
+    "relevant_document_titles": ["Ezitech Python Coding Standards"]
+  },
+  {
+    "category": "sop",
+    "query": "What is the SOP for onboarding a new mentor?",
+    "relevant_document_titles": ["SOP - Mentor Onboarding"]
+  },
+  {
+    "category": "sop",
+    "query": "What is the standard procedure for reporting a production incident?",
+    "relevant_document_titles": ["SOP - Incident Response"]
+  },
+  {
+    "category": "sop",
+    "query": "How should an intern request access to internal repositories and tools?",
+    "relevant_document_titles": ["SOP - Access Request Process"]
+  },
+  {
+    "category": "sop",
+    "query": "What is the escalation path if a mentor is unresponsive for more than 48 hours?",
+    "relevant_document_titles": ["SOP - Mentor Onboarding", "SOP - Escalation Procedures"]
+  },
+  {
+    "category": "github_repositories",
+    "query": "How is the ingestion pipeline structured in the EKIE repository?",
+    "relevant_document_titles": ["app/ingestion/pipeline.py"]
+  },
+  {
+    "category": "github_repositories",
+    "query": "Where is entity and relationship extraction implemented for the knowledge graph?",
+    "relevant_document_titles": ["app/graph/extract.py"]
+  },
+  {
+    "category": "github_repositories",
+    "query": "How does the hybrid search endpoint combine semantic and keyword results?",
+    "relevant_document_titles": ["app/search/hybrid.py"]
+  },
+  {
+    "category": "github_repositories",
+    "query": "Where are the FastAPI routes for the knowledge platform defined?",
+    "relevant_document_titles": ["app/api/routes.py"]
+  },
+  {
+    "category": "api_documentation",
+    "query": "What request body does the POST /ask endpoint expect?",
+    "relevant_document_titles": ["EKIE API Documentation"]
+  },
+  {
+    "category": "api_documentation",
+    "query": "What parameters does the /search/hybrid endpoint accept?",
+    "relevant_document_titles": ["EKIE API Documentation"]
+  },
+  {
+    "category": "api_documentation",
+    "query": "What HTTP status code does the document summary endpoint return for a missing document?",
+    "relevant_document_titles": ["EKIE API Documentation"]
+  },
+  {
+    "category": "database_schemas",
+    "query": "What columns does the documents table have?",
+    "relevant_document_titles": ["EKIE Database Schema"]
+  },
+  {
+    "category": "database_schemas",
+    "query": "How are document chunks linked back to their parent document in the database?",
+    "relevant_document_titles": ["EKIE Database Schema"]
+  },
+  {
+    "category": "database_schemas",
+    "query": "What node and relationship types exist in the Neo4j knowledge graph?",
+    "relevant_document_titles": ["Knowledge Graph Schema"]
+  },
+  {
+    "category": "lms_courses",
+    "query": "What topics are covered in the introductory Retrieval-Augmented Generation course?",
+    "relevant_document_titles": ["LMS - Introduction to RAG Systems"]
+  },
+  {
+    "category": "lms_courses",
+    "query": "Where can I learn about vector databases and embedding models as a new intern?",
+    "relevant_document_titles": ["LMS - Vector Databases and Embeddings"]
+  },
+  {
+    "category": "lms_courses",
+    "query": "Is there a course on FastAPI fundamentals for backend interns?",
+    "relevant_document_titles": ["LMS - FastAPI Fundamentals"]
+  },
+  {
+    "category": "research_papers",
+    "query": "What ranking method does reciprocal rank fusion use to combine multiple search result lists?",
+    "relevant_document_titles": ["Reciprocal Rank Fusion - Research Notes"]
+  },
+  {
+    "category": "research_papers",
+    "query": "What are the tradeoffs between dense and sparse retrieval methods?",
+    "relevant_document_titles": ["Dense vs Sparse Retrieval - Research Notes"]
+  },
+  {
+    "category": "meeting_notes",
+    "query": "What decisions were made in the Week 2 architecture review meeting?",
+    "relevant_document_titles": ["Meeting Notes - Week 2 Architecture Review"]
+  },
+  {
+    "category": "meeting_notes",
+    "query": "What action items came out of the sprint planning meeting for the knowledge graph feature?",
+    "relevant_document_titles": ["Meeting Notes - Sprint Planning Knowledge Graph"]
+  },
+  {
+    "category": "transcripts",
+    "query": "What did the mentor explain about chunking strategy in the recorded onboarding session?",
+    "relevant_document_titles": ["Transcript - Mentor Session on Chunking Strategy"]
+  },
+  {
+    "category": "transcripts",
+    "query": "What was discussed in the recorded session about evaluating retrieval quality?",
+    "relevant_document_titles": ["Transcript - Retrieval Evaluation Walkthrough"]
+  },
+  {
+    "category": "technical_blogs",
+    "query": "What does Ezitech's engineering blog say about choosing between Pinecone and ChromaDB?",
+    "relevant_document_titles": ["Blog - Choosing a Vector Database"]
+  },
+  {
+    "category": "technical_blogs",
+    "query": "What are best practices for prompt engineering according to the internal blog?",
+    "relevant_document_titles": ["Blog - Prompt Engineering Best Practices"]
+  },
+  {
+    "category": "company_policies",
+    "query": "What is Ezitech's data retention policy for uploaded documents?",
+    "relevant_document_titles": ["Company Policy - Data Retention"]
+  },
+  {
+    "category": "company_policies",
+    "query": "What is the company's policy on using third-party AI APIs with customer data?",
+    "relevant_document_titles": ["Company Policy - Third-Party AI Usage"]
+  },
+  {
+    "category": "company_policies",
+    "query": "What is Ezitech's remote work policy for interns?",
+    "relevant_document_titles": ["Company Policy - Remote Work"]
+  },
+  {
+    "category": "comparison_multi_doc",
+    "query": "What's the difference between the code review SOP and the mentor onboarding SOP?",
+    "relevant_document_titles": ["SOP - Code Review Process", "SOP - Mentor Onboarding"]
+  },
+  {
+    "category": "comparison_multi_doc",
+    "query": "How does the Python coding standard relate to the code review SOP's approval criteria?",
+    "relevant_document_titles": ["Ezitech Python Coding Standards", "SOP - Code Review Process"]
+  },
+  {
+    "category": "gap_detection",
+    "query": "Is there a documented SOP for offboarding an intern at the end of their program?",
+    "relevant_document_titles": ["SOP - Intern Offboarding"]
   }
 ]

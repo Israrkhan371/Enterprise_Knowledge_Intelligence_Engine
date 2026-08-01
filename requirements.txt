@@ -38,6 +38,7 @@ transformers==4.46.3
 sentence-transformers==3.4.1
 tokenizers==0.20.3
 chromadb==0.5.23
+numpy==1.26.4
 pandas==2.3.3
 opencv-python==4.11.0.86
 

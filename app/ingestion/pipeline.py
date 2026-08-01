@@ -9,7 +9,8 @@ from app.ingestion.chunking import chunk_text
 from app.embeddings.embedder import embed_texts
 from app.embeddings.vector_store import upsert_chunks
 from app.graph.build import GraphStore
-from app.graph.extract import extract_entities, extract_relationships
+from app.graph.extract import extract_cooccurrences, extract_entities
+from app.graph.relationships import aggregate_cooccurrences
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +45,10 @@ def _populate_graph(document: Document, text: str) -> None:
         if not entities:
             return
         store.upsert_entities(document.id, entities)
-        relationships = extract_relationships(text, entities)
-        if relationships:
-            store.upsert_relationships(relationships)
+        records = extract_cooccurrences(text, entities)
+        if records:
+            aggregated = aggregate_cooccurrences(records)
+            store.upsert_cooccurrence(document.id, document.source_type, aggregated)
     except Exception:
         logger.exception(
             "Graph population failed for document_id=%s (title=%r); "

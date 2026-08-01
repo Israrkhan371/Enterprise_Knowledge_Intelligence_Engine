@@ -3,7 +3,7 @@ import logging
 from sqlalchemy.orm import Session
 
 from app.core.models import Document, DocumentChunk
-from app.ingestion.loaders import load_by_source_type, load_github_repo
+from app.ingestion.loaders import load_by_source_type, load_github_repo, extract_code_comments
 from app.ingestion.ocr import needs_ocr, ocr_scanned_pdf
 from app.ingestion.chunking import chunk_text
 from app.embeddings.embedder import embed_texts
@@ -85,10 +85,20 @@ def _chunk_embed_store(db: Session, document: Document, text: str) -> Document:
     chunks = chunk_text(text)
 
     embeddings = embed_texts(chunks)
+
+    # Resolve the category *name* (not the raw category_id UUID) for
+    # ChromaDB metadata, since semantic_search()'s category_filter takes a
+    # human-readable string (e.g. "test-category"), not a UUID. document
+    # was already flushed above, so document.category triggers a normal
+    # SQLAlchemy relationship lookup within this session if category_id
+    # is set; stays None for uncategorized documents.
+    category_name = document.category.name if document.category_id else None
+
     vector_ids = upsert_chunks(
         document_id=document.id,
         chunks=chunks,
         embeddings=embeddings,
+        category=category_name,
     )
 
     for idx, (chunk, vec_id) in enumerate(zip(chunks, vector_ids)):
@@ -108,7 +118,16 @@ def _chunk_embed_store(db: Session, document: Document, text: str) -> Document:
     # the full document text (see _populate_graph docstring for why it
     # doesn't reuse `chunks`). It never raises, so a Neo4j failure can't
     # undo the ingestion that already succeeded.
-    _populate_graph(document, text)
+    #
+    # Exception: for code/github documents, NER runs on comments/docstrings
+    # only, not the raw source - running NER on code syntax produces noise
+    # (class names, exception identifiers misread as entities). This does
+    # NOT affect embeddings/chunking above, which still use the full,
+    # unfiltered `text` - code stays fully searchable either way.
+    graph_text = text
+    if document.source_type in ("code", "github"):
+        graph_text = extract_code_comments(text)
+    _populate_graph(document, graph_text)
 
     return document
 

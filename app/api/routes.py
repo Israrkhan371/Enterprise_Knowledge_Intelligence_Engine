@@ -3,12 +3,14 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
+from datetime import datetime
 
 from app.core.database import get_db
 from app.core.models import Document, UsageLog
 from app.search.semantic import semantic_search
 from app.search.keyword import keyword_search
 from app.search.hybrid import hybrid_search
+from app.search.metadata import metadata_search
 from app.search.context_aware import rewrite_query
 from app.rag.generate import generate_answer
 from app.rag.citation_check import verify_citations
@@ -54,8 +56,8 @@ class SummaryResponse(BaseModel):
 
 
 @router.get("/search/semantic")
-def search_semantic(q: str, top_k: int = 10):
-    return semantic_search(q, top_k=top_k)
+def search_semantic(q: str, top_k: int = 10, category_filter: str | None = None):
+    return semantic_search(q, top_k=top_k, category_filter=category_filter)
 
 
 @router.get("/search/keyword")
@@ -64,8 +66,29 @@ def search_keyword(q: str, top_k: int = 10, db: Session = Depends(get_db)):
 
 
 @router.get("/search/hybrid")
-def search_hybrid(q: str, top_k: int = 10, db: Session = Depends(get_db)):
-    return hybrid_search(db, q, top_k=top_k)
+def search_hybrid(q: str, top_k: int = 10, category_filter: str | None = None, db: Session = Depends(get_db)):
+    return hybrid_search(db, q, top_k=top_k, category_filter=category_filter)
+
+
+@router.get("/search/metadata")
+def search_metadata(
+    category: str | None = None,
+    source_type: str | None = None,
+    status: str | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    top_k: int = 10,
+    db: Session = Depends(get_db),
+):
+    return metadata_search(
+        db,
+        category=category,
+        source_type=source_type,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        top_k=top_k,
+    )
 
 
 @router.post("/ask")

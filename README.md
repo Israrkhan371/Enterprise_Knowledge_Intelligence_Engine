@@ -109,17 +109,105 @@ mapped to each requirement.
   (one per file) instead of `str` like every other loader, so it is
   **deliberately excluded** from `SOURCE_LOADERS` and routed instead through
   `ingest_github_repo()` in `pipeline.py`, which fans each file out into its
-  own `Document` row. It also recurses into subfolders (depth-guarded, with
-  a directory exclusion list for `.git`/`node_modules`/`__pycache__`/etc.) —
-  an earlier version only pulled root-level files, caught via manual testing
-  against the real EKIE repo and fixed 2026-07-18 (re-verified: 38 files
-  across every subfolder, no excluded dirs leaked in). Add new single-file
-  formats by registering a function in `SOURCE_LOADERS`; multi-file sources
-  like GitHub should follow the `ingest_github_repo()` fan-out pattern
-  instead.
+  own `Document` row. **There is currently no REST/admin endpoint that calls
+  `ingest_github_repo()`** — it must be invoked directly in Python
+  (`docker exec -it ekie-api python`) until an admin route is added; every
+  other loader is reachable via `POST /admin/documents/upload`. It also
+  recurses into subfolders (depth-guarded, with a directory exclusion list
+  for `.git`/`node_modules`/`__pycache__`/etc.) — an earlier version only
+  pulled root-level files, caught via manual testing against the real EKIE
+  repo and fixed 2026-07-18 (re-verified: 38 files across every subfolder,
+  no excluded dirs leaked in). Add new single-file formats by registering a
+  function in `SOURCE_LOADERS`; multi-file sources like GitHub should
+  follow the `ingest_github_repo()` fan-out pattern instead.
+- **API docs, DB schema, and LMS loaders** (`load_api_docs`, `load_db_schema`,
+  `load_lms`) were added 2026-07-21, bringing `tests/test_loaders.py` to 35
+  passed/1 skipped (36 collected). `load_api_docs` flattens an
+  OpenAPI/Swagger JSON spec into prose (`METHOD /path — summary` plus
+  params/response descriptions) rather than embedding raw JSON syntax.
+  `load_db_schema` keeps `CREATE TABLE`/`ALTER TABLE`/`CREATE INDEX`/comment
+  statements from a `.sql` dump but strips `INSERT INTO` rows and
+  `COPY ... FROM stdin` data blocks, so real row data can never leak into
+  the vector store — only schema *shape* is ever embedded. `load_lms`
+  handles both a SCORM `.zip` package (concatenates every HTML content file
+  inside, skips `imsmanifest.xml` packaging metadata) and a single exported
+  `.html` file. All three read with `utf-8-sig` rather than `utf-8`, since
+  files saved via Windows tools (e.g. PowerShell's `Out-File -Encoding
+  utf8`) write a UTF-8 BOM that `json.loads()` chokes on
+  (`load_api_docs` was the loader that surfaced this, since it's the only
+  one doing strict JSON parsing — the others tolerated the stray BOM
+  character silently). Verified live through the real upload endpoint for
+  all three, not just via automated tests, including the BOM case
+  specifically (2026-07-22).
 - **Keyword search** uses Postgres full-text search rather than standing up
   Elasticsearch/OpenSearch, to keep infra light; swap in `app/search/keyword.py`
-  if you need BM25-grade ranking at larger scale.
+  if you need BM25-grade ranking at larger scale. Backed by a GIN index
+  (`chunks_fts_idx` on `document_chunks`, declared in `app/core/models.py`
+  via `Index(..., postgresql_using="gin")` so `create_all()` creates it —
+  confirmed live via `pg_indexes`, added 2026-07-30). Covered by
+  `tests/test_keyword.py` (7 tests, mocked at the query level) and
+  `tests/test_keyword_search_integration.py` (11 tests: real loader → real
+  chunker → real Postgres write → `keyword_search()`, one per source type,
+  GitHub mocked to avoid a live network call; PDF is `@pytest.mark.skip`ed
+  pending a real `tests/fixtures/sample.pdf`, same as `test_loaders.py`'s
+  equivalent skip). Manually verified against real ingested content across
+  all 11 source types, including PDF and a real GitHub repo run through
+  the full `ingest_github_repo()` pipeline, not just `load_github_repo()`
+  (2026-07-30). Known limitation: Postgres's tokenizer treats a leading
+  `/` as part of the token, so a query for a path-like term (e.g. an
+  OpenAPI path segment) needs the slash included to match — confirmed via
+  the `/flangeburst987` case during that verification pass.
+- **Hybrid search** (`app/search/hybrid.py`) fuses semantic + keyword results
+  via reciprocal rank fusion. Found and fixed a real bug 2026-07-30: RRF
+  fused on `"id"`, but `semantic_search()`'s `"id"` (a ChromaDB vector id
+  like `"doc-1::abc"`) and `keyword_search()`'s `"id"` (the Postgres
+  `document_chunks` primary key) are two disjoint id spaces for the *same*
+  chunk — so a chunk ranked well by both methods could never be recognized
+  as the same item and boosted, silently defeating the entire point of RRF
+  fusion (it degraded to "semantic results, then keyword results,
+  re-sorted"). Fixed by having `keyword_search()` also return
+  `embedding_id` (the value `semantic_search()` already calls `"id"`) and
+  fusing on that shared value instead, with a collision-safe fallback key
+  for chunks that haven't been embedded yet. Also fixed RRF's payload
+  merge, which previously let the second list's dict silently overwrite
+  the first's fields on a match (losing e.g. `distance`/`metadata` from a
+  semantic hit). `category_filter` added to `hybrid_search()`/
+  `/search/hybrid` for parity with `/search/semantic`. Covered by
+  `tests/test_hybrid.py` (9 tests, mocked).
+- **Metadata search** (`app/search/metadata.py`, `GET /search/metadata`) —
+  the missing piece flagged in the Week 2 Thursday tracker row: filters
+  documents by category/source_type/status/date range rather than by
+  textual relevance to a query (that's what semantic/keyword/hybrid search
+  are for). Covered by `tests/test_metadata.py` (7 integration tests
+  against a real, rolled-back Postgres transaction).
+- **Context-aware query rewriting** (`app/search/context_aware.py::
+  rewrite_query`, used by `/ask`) is now wired to a real Gemini call (same
+  client pattern as `app/rag/generate.py`) instead of the previous stub
+  that always returned the query unchanged regardless of conversation
+  history. Falls back to the original query on any API error rather than
+  raising, so a rewrite failure can't break `/ask`. Covered by
+  `tests/test_context_aware.py` (7 tests, mocked) and manually verified
+  live (2026-07-30): `rewrite_query("what are its main dependencies?",
+  [{"role": "user", "content": "What is FastAPI?"}])` returned `"What are
+  FastAPI's main dependencies?"` — a genuinely rewritten, pronoun-resolved
+  query, confirming the LLM call actually executes rather than silently
+  falling back. That check also surfaced a separate, unrelated problem:
+  `GEMINI_MODEL=gemini-2.5-flash` (the default in `.env.example`/
+  `app/core/config.py`) was rejected by the live API; fixed by switching
+  the default to `GEMINI_MODEL=gemini-flash-latest`, confirmed working via
+  a direct `generate_content` call returning real text.
+- **RAG citation mapping** (`app/rag/generate.py`, `app/rag/
+  citation_check.py`) — found and fixed a related bug while auditing
+  hybrid search: `build_context_block()`'s `hit.get("document_id",
+  hit.get("id"))` fallback silently substituted the ChromaDB vector id for
+  the real document id in citations sourced from semantic-only hits,
+  because `semantic_search()` never exposed `document_id` at the top level
+  (only nested in `metadata`). Fixed in `app/search/semantic.py`. Neither
+  `generate.py` nor `citation_check.py` had any tests before this session;
+  now covered by `tests/test_generate.py` (6 tests) and
+  `tests/test_citation_check.py` (7 tests), both mocked. Citation
+  *accuracy* against a real query set is still unmeasured — see Next
+  steps.
 - **Entity/relationship extraction and graph population** are implemented
   and confirmed wired end-to-end, not just present as standalone modules:
   `_populate_graph()` in `app/ingestion/pipeline.py` runs after every
@@ -367,6 +455,33 @@ re-discovers them the hard way on a fresh machine:
    text) and is now the default in `app/core/config.py` and `.env.example`.
    If you already have a `.env` from before this fix, update `GEMINI_MODEL`
    there too - it isn't regenerated from `.env.example` automatically.
+7. **The ChromaDB Python client and server image must stay on the same
+   version.** `requirements-lock.txt` pins `chromadb==0.5.23`, but the
+   `chromadb` service in `docker-compose.yml` had drifted to the older
+   `chromadb/chroma:0.5.15` server image. The 0.5.23 client added a
+   startup auth-identity handshake (`GET /auth/identity`) that the 0.5.15
+   server doesn't expose, so *every* Chroma operation (upsert, query) fails
+   with a `404 Not Found` wrapped in a confusing
+   `ValueError: {"detail":"Not Found"}` — the traceback points at
+   `get_user_identity()`, not at anything your code actually called, which
+   makes it easy to mistake for a config/networking problem. Fixed by
+   bumping the compose image to `chromadb/chroma:0.5.23` to match the
+   client. If you ever bump `chromadb` in `requirements-lock.txt`, bump the
+   compose image tag to match in the same change.
+8. **FastAPI silently drops query/form parameters that aren't declared in
+   the route function's signature — it does not error.** This bit us
+   twice: `ingest_github_repo()` has no admin route at all yet (see the
+   GitHub loader note above), and `semantic_search()`'s `category_filter`
+   parameter was fully implemented, correctly applied, and covered by
+   passing unit tests — but the `/search/semantic` route handler's own
+   signature never declared `category_filter`, so it was accepted and
+   silently discarded from every real HTTP request. Filtered and
+   unfiltered queries returned identical results with no error anywhere in
+   the logs. The lesson: when a search/pipeline function gains a new
+   parameter, grep for every route that calls it and confirm the parameter
+   is threaded all the way from the route signature through — a passing
+   unit test on the underlying function proves nothing about whether the
+   HTTP layer actually exposes it.
 
 ## Running tests
 
@@ -467,18 +582,25 @@ docstring on `run_evaluation()`.
 ## Next steps
 
 1. Ingest a real corpus with titles matching `app/evaluation/eval_set.json`
-   (see "Evaluation query set" above), then hit `POST /api/v1/evaluation/run`.
-2. Add a GIN index for Postgres full-text search (see comment in
-   `app/search/keyword.py`) before load-testing keyword/hybrid search.
-3. Wire `app/search/context_aware.py::rewrite_query` to a live LLM call —
-   it's stubbed to a pass-through for now.
-4. `reciprocal_rank_fusion()` in `app/search/hybrid.py` currently fuses by
-   raw chunk id (`key="id"`, the default). Semantic hits use a Chroma
-   composite id and keyword hits use the Postgres `document_chunks.id` PK —
-   two disjoint id spaces even for the exact same underlying chunk, so
-   "fusion" between the two result lists never actually merges a chunk
-   found by both methods; it just concatenates and re-ranks. Not changed in
-   this pass since switching the fusion key to `document_id` is a real
-   granularity trade-off (chunk-level context in `generate.py`'s citations
-   vs. document-level dedup) rather than a one-line fix — flagging it here
-   for a deliberate decision rather than a silent change.
+   (see "Evaluation query set" above), then hit `POST /api/v1/evaluation/run`
+   to actually measure RAG/retrieval/citation accuracy — `/ask`,
+   `citation_check.py`, and the precision/recall/MRR harness are implemented
+   and unit-tested, but accuracy itself is still unmeasured against a real
+   query set.
+2. Run `GraphStore.upsert_cooccurrence()` live against a real docker-compose
+   Neo4j instance — the accumulate-across-documents Cypher has only been
+   reasoned through and mock-tested so far (see "Technology maps & skill
+   dependencies" above).
+3. Add an admin/REST route for `ingest_github_repo()` — it currently only
+   runs via a direct Python shell (`docker exec -it ekie-api python`).
+4. Add `tests/fixtures/sample.pdf` so `test_load_pdf_on_real_sample_if_present`
+   (`test_loaders.py`) and `test_keyword_search_finds_pdf_content`
+   (`test_keyword_search_integration.py`) can run instead of skipping.
+5. Batch `upsert_cooccurrence`'s per-pair Neo4j round trips before any large
+   bulk repo ingest — currently three round trips per unique entity pair per
+   document, fine at current volume but not at scale (see documented
+   limitation above).
+6. Cross-document entity resolution (the same person/tool named differently
+   across two separate uploads currently creates two graph nodes) —
+   deliberately deferred; needs fuzzy/LLM-based matching with real
+   false-positive risk, not a quick fix.

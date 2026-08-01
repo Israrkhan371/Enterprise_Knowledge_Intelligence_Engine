@@ -1,5 +1,7 @@
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -10,7 +12,7 @@ from app.search.hybrid import hybrid_search
 from app.search.context_aware import rewrite_query
 from app.rag.generate import generate_answer
 from app.rag.citation_check import verify_citations
-from app.rag.intelligence import compare_documents, summarize_document
+from app.rag.intelligence import compare_documents, compare_documents_full, summarize_document_full
 from app.graph.queries import (
     explain_relationship,
     get_skill_dependencies,
@@ -21,6 +23,8 @@ from app.evaluation.eval import run_evaluation
 
 router = APIRouter(tags=["knowledge"])
 
+logger = logging.getLogger(__name__)
+
 
 class AskRequest(BaseModel):
     query: str
@@ -29,8 +33,24 @@ class AskRequest(BaseModel):
 
 
 class CompareRequest(BaseModel):
-    document_id_a: str
-    document_id_b: str
+    document_id_a: str = Field(min_length=1)
+    document_id_b: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _ids_must_differ(self):
+        if self.document_id_a == self.document_id_b:
+            raise ValueError("document_id_a and document_id_b must be different documents")
+        return self
+
+
+class CompareResponse(BaseModel):
+    similarity: float | None
+    diff: list[str]
+    summary: str
+
+
+class SummaryResponse(BaseModel):
+    summary: str
 
 
 @router.get("/search/semantic")
@@ -51,7 +71,12 @@ def search_hybrid(q: str, top_k: int = 10, db: Session = Depends(get_db)):
 @router.post("/ask")
 def ask(payload: AskRequest, db: Session = Depends(get_db)):
     query = rewrite_query(payload.query, payload.history)
-    result = generate_answer(db, query)
+    try:
+        result = generate_answer(db, query)
+    except TimeoutError:
+        logger.error("Answer generation timed out for query=%r.", payload.query)
+        raise HTTPException(status_code=504, detail="LLM request timed out")
+
     verification = verify_citations(result["answer"], result["sources"])
 
     db.add(UsageLog(
@@ -65,21 +90,46 @@ def ask(payload: AskRequest, db: Session = Depends(get_db)):
     return {**result, "citation_check": verification}
 
 
-@router.post("/documents/compare")
+@router.post("/documents/compare", response_model=CompareResponse)
 def compare(payload: CompareRequest, db: Session = Depends(get_db)):
     doc_a = db.get(Document, payload.document_id_a)
     doc_b = db.get(Document, payload.document_id_b)
-    if not doc_a or not doc_b:
-        return {"error": "one or both documents not found"}
-    return {"comparison": compare_documents(doc_a.raw_text or "", doc_b.raw_text or "")}
+
+    missing_ids = [
+        doc_id for doc_id, doc in (
+            (payload.document_id_a, doc_a),
+            (payload.document_id_b, doc_b),
+        ) if doc is None
+    ]
+    if missing_ids:
+        raise HTTPException(status_code=404, detail=f"document(s) not found: {', '.join(missing_ids)}")
+
+    try:
+        return compare_documents_full(doc_a.raw_text or "", doc_b.raw_text or "")
+    except TimeoutError:
+        logger.error(
+            "Document comparison timed out for document_id_a=%s, document_id_b=%s.",
+            payload.document_id_a, payload.document_id_b,
+        )
+        raise HTTPException(status_code=504, detail="LLM request timed out")
+    except Exception:
+        logger.exception(
+            "Document comparison failed unexpectedly for document_id_a=%s, document_id_b=%s.",
+            payload.document_id_a, payload.document_id_b,
+        )
+        raise HTTPException(status_code=502, detail="Document comparison failed. Please try again later.")
 
 
-@router.get("/documents/{document_id}/summary")
+@router.get("/documents/{document_id}/summary", response_model=SummaryResponse)
 def summarize(document_id: str, db: Session = Depends(get_db)):
     doc = db.get(Document, document_id)
     if not doc:
-        return {"error": "document not found"}
-    return {"summary": summarize_document(doc.raw_text or "")}
+        raise HTTPException(status_code=404, detail=f"document not found: {document_id}")
+    try:
+        return {"summary": summarize_document_full(doc.raw_text or "")}
+    except TimeoutError:
+        logger.error("Document summary timed out for document_id=%s.", document_id)
+        raise HTTPException(status_code=504, detail="LLM request timed out")
 
 
 @router.get("/graph/technology-map")

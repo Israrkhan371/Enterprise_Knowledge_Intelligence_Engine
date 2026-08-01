@@ -35,6 +35,40 @@ docker compose up --build
 - Neo4j browser: http://localhost:7474
 - MLflow UI: http://localhost:5000
 - Prometheus: http://localhost:9090
+- `GET /health` returns `{"status": "ok", "version": ...}` — check this
+  first if the API's behavior doesn't match what you expect from the
+  source (e.g. a field missing from `/docs`/`/openapi.json`): a version
+  mismatch there means the running container is stale and needs a rebuild
+  (`docker compose up --build`, or `docker compose build --no-cache api`
+  if compose is caching layers you don't want).
+
+## Document lifecycle
+
+```
+POST /admin/documents/upload
+        v
+loading -> OCR (if needed) -> chunking -> embedding -> vector store upsert
+-> Postgres DocumentChunk rows -> knowledge graph population   [synchronous —
+   all of this finishes before the upload request returns]
+        v
+Document.status = "pending"        <-- admin review, NOT an ingestion/processing
+                                        state. The document is already fully
+                                        chunked/embedded/indexed at this point.
+        v
+GET /admin/documents               <-- discover document ids + status
+GET /admin/documents/{id}          <-- inspect one document (status, chunk_count, ...)
+POST /admin/documents/{id}/approve <-- record a review decision -> "approved"/"rejected"
+```
+
+**Important:** an uploaded document is queryable via `/search/*` and `/ask`
+immediately after upload, before any admin approval — `status` currently
+tracks review record-keeping only, not content visibility. If you need
+unapproved documents excluded from search/RAG results, that's a filter to
+add in `app/search/keyword.py` / `app/search/semantic.py` (`WHERE
+documents.status = 'approved'`) — intentionally not added in this pass,
+since it changes what's currently a "everything uploaded is live"
+behavior into a real publish gate, which is a product decision, not a bug
+fix.
 
 ## Project layout
 
@@ -44,8 +78,8 @@ docker compose up --build
 | `app/embeddings/` | Embedding model wrapper, Chroma vector store |
 | `app/search/` | Semantic, keyword, hybrid, context-aware search |
 | `app/graph/` | Entity/relationship extraction, Neo4j read/write |
-| `app/rag/` | Answer generation, citation verification, doc intelligence (duplicates, staleness, gaps, comparison, summarization) |
-| `app/admin/` | Upload, approval workflow, categories, analytics, quality endpoints |
+| `app/rag/` | Answer generation, citation verification, doc intelligence (duplicates, staleness, gaps, comparison, summarization); `gemini_utils.py` holds the shared `call_with_timeout()` used by every Gemini call site |
+| `app/admin/` | Upload, document listing/detail, approval workflow, categories, analytics, quality endpoints |
 | `app/evaluation/` | Retrieval evaluation harness (precision/recall/MRR), MLflow logging |
 | `app/core/` | Config, DB session, ORM models |
 | `docs/knowledge_graph_schema.md` | Neo4j node/relationship types, constraints, indexes |
@@ -212,6 +246,77 @@ mapped to each requirement.
 - **Bonus feature implemented:** AI Citation Verification (`app/rag/citation_check.py`)
   and Knowledge Gap Detection (`app/rag/intelligence.py::detect_knowledge_gaps`) —
   both reuse infrastructure already built for the core requirements.
+- **Duplicate detection** (`GET /admin/quality/duplicates`, `detect_duplicates()`
+  in `app/rag/intelligence.py`) flags document pairs with near-identical
+  content, via cosine similarity between chunk embeddings (default threshold
+  0.92, overridable per call).
+  - Reuses each chunk's embedding already stored in ChromaDB at ingestion
+    time (`document_chunks.embedding_id`) instead of re-embedding every
+    chunk on every call (`_fetch_stored_embeddings()`); only chunks with no
+    stored embedding, or a Chroma miss, fall back to a fresh `embed_texts()`
+    call. If that fallback itself fails, the affected chunks are excluded
+    from that run rather than raising — duplicate detection is a background
+    quality signal, not a critical path, so a partial result beats a hard
+    failure.
+  - Similarity is computed as a single vectorized `numpy` matrix multiply
+    across all chunk vectors, not a Python-level O(n²) double loop —
+    matters once the corpus grows past a few hundred chunks.
+  - Results are aggregated to **one row per document pair** (the max
+    similarity across all of that pair's matching chunks), not one row per
+    matching chunk pair — two documents sharing several near-identical
+    chunks would otherwise flood the report with repeat rows for the same
+    two documents. Output is sorted by similarity, descending, and
+    `document_a`/`document_b` are alphabetically ordered so the same pair
+    always reports the same way regardless of which document's chunk was
+    read first.
+  - Covered by `tests/test_intelligence_detect_duplicates.py` (17 tests:
+    threshold boundaries, same-document exclusion, stored-embedding reuse,
+    fallback-embedding paths, aggregation/ordering).
+  - Known, deliberately out-of-scope limitations: chunks that go through
+    the `embed_texts()` fallback aren't written back to ChromaDB/
+    `embedding_id`, so the same chunk gets re-embedded on every future call
+    until it's re-ingested normally; and the underlying query
+    (`SELECT * FROM document_chunks`) loads the whole table into memory
+    with no batching/pagination. Both are scale concerns for a much larger
+    corpus, not correctness bugs today.
+- **Document Comparison Endpoint** (`POST /documents/compare`,
+  `compare_documents_full()` in `app/rag/intelligence.py`) combines three
+  signals for a pair of documents in one response: embedding similarity
+  (`_embedding_similarity()` — cosine similarity between whole-document
+  embeddings, `None` if either document is blank or embedding fails),
+  a line-level unified diff (`_diff_texts()`, capped at 500 lines with a
+  truncation marker so one huge document pair can't blow up the response),
+  and an LLM-generated narrative summary of differences/overlaps
+  (`compare_documents()`). Short documents (≤4000 chars each) are sent to
+  Gemini in a single inline call; longer documents are chunked, each chunk
+  summarized individually, then combined into one final comparison call
+  — so the summary covers the whole document, not just its first few
+  thousand characters. All Gemini calls go through a shared
+  `call_with_timeout()` utility (`app/rag/gemini_utils.py`,
+  `settings.gemini_timeout_seconds`, default 30s); a timeout returns
+  HTTP 504 rather than hanging the request, and any other LLM failure
+  falls back to a comparison response with a fallback `summary` string
+  ("Summary unavailable: ...") plus the similarity/diff fields still
+  populated, rather than failing the whole endpoint. Covered by
+  `tests/test_intelligence_compare.py`.
+- **Summarization Endpoint** (`GET /documents/{document_id}/summary`,
+  `summarize_document_full()` in `app/rag/intelligence.py`) returns an
+  on-demand LLM summary of a single document. Same inline-vs-chunked split
+  as document comparison: documents ≤4000 chars are summarized in one call
+  with their full text; longer documents are chunked
+  (`_chunk_summarize()`), each chunk summarized individually, then a final
+  `_combine_summaries()` call merges those into one coherent whole-document
+  summary — replacing an earlier version that silently truncated anything
+  past the first 6000 characters. The per-chunk leaf (`summarize_document()`)
+  deliberately never decides to chunk itself: `chunk_text()`'s default
+  800-word chunks run ~4-5k chars, just over the inline threshold, so a
+  chunking-aware leaf re-fed its own chunk would re-chunk into an identical
+  single chunk and recurse forever — `summarize_document_full()` is the only
+  place that makes that decision. Same timeout/fallback handling as
+  comparison: a Gemini timeout returns HTTP 504, any other LLM failure
+  degrades to a fallback summary string rather than failing the request.
+  Missing document IDs return HTTP 404 (previously returned `{"error": ...}`
+  with a `200 OK`). Covered by `tests/test_intelligence_summarize.py`.
 
 ## Known setup gotchas (already fixed in this repo — read before "fixing" them again)
 
@@ -254,6 +359,14 @@ re-discovers them the hard way on a fresh machine:
    healthcheck and `api` depends on `neo4j: condition: service_healthy`;
    `app/main.py` also retries `init_schema()` with backoff as a safety net
    for running `api` outside that ordering (e.g. restarting it alone).
+6. **`GEMINI_MODEL` default was `gemini-2.5-flash`, which the live Gemini
+   API rejects.** Found 2026-07-30 while manually verifying `rewrite_query()`
+   against the live API: a direct `client.models.generate_content()` call
+   with that model name failed. `gemini-flash-latest` was confirmed working
+   (both a plain test call and `rewrite_query()`'s actual usage returned real
+   text) and is now the default in `app/core/config.py` and `.env.example`.
+   If you already have a `.env` from before this fix, update `GEMINI_MODEL`
+   there too - it isn't regenerated from `.env.example` automatically.
 
 ## Running tests
 
@@ -268,11 +381,104 @@ container:
 docker exec -it ekie-api pytest tests/ -v
 ```
 
+## Evaluation query set
+
+`app/evaluation/eval_set.json` now has 40 Q&A pairs (target: 30-50) spanning
+every knowledge source type in the spec — internship case studies, coding
+standards, SOPs, GitHub repos (file-level), API docs, DB schemas, LMS
+courses, research notes, meeting notes, transcripts, blogs, and company
+policies — plus a couple of multi-document comparison queries and one
+gap-detection query (asks about a document that's expected not to exist yet).
+
+**Entries are keyed by `relevant_document_titles`, not raw document ids.**
+`Document.id` is a random `uuid4` assigned at ingest time
+(`gen_uuid()` in `app/core/models.py`) — it can't be known ahead of
+ingestion, and it changes every time the corpus is wiped/reseeded. Hardcoding
+ids into a checked-in fixture meant the eval set silently stopped matching
+anything after the next reset (this is also why the two placeholder entries
+that shipped before this pass had empty `relevant_document_ids: []` — nobody
+could fill them in without going through the full ingest -> copy generated
+UUID -> paste loop by hand every time). `app/evaluation/eval.py::resolve_relevant_ids()`
+now resolves titles to whatever the *current* document ids are at evaluation
+time, so the fixture stays valid across reseeds.
+
+**To make these 40 queries actually score**, ingest documents via
+`POST /admin/documents/upload` with a `title` matching each entry's
+`relevant_document_titles` exactly (the endpoint now accepts an optional
+`title` field — see "Known flaws fixed" below; it previously always used the
+raw uploaded filename, which made hitting an exact title awkward). A raw
+`relevant_document_ids` list is still supported per-entry for the rare case
+a real id is already known. Entries whose titles don't resolve to any
+ingested document are skipped (and counted in the `skipped` field of the
+`run_evaluation()` result) rather than silently scored as a 0 — see the
+docstring on `run_evaluation()`.
+
+## Known flaws fixed in this pass
+
+- **`semantic_search()` hits were missing `document_id`.** Both
+  `app/evaluation/eval.py` and `app/rag/generate.py` read
+  `hit.get("document_id", hit.get("id"))` to identify which document a hit
+  came from — for citations, and for eval precision/recall/MRR scoring.
+  Keyword-search hits always had `document_id`; semantic-search hits didn't,
+  so that `.get()` silently fell back to the raw Chroma chunk id (a
+  `"{document_id}::{uuid}"` composite string) instead of the real document
+  id, for every semantic-search-sourced hit. This broke citation source ids
+  in `/ask` responses and made eval scoring undercount semantic hits as
+  misses even when the correct document was retrieved. Fixed in
+  `app/search/semantic.py` (document_id is read from Chroma metadata, with
+  a fallback to parsing it off the chunk id); regression-tested in
+  `tests/test_search_semantic.py`.
+- **`app/admin/routes.py::upload_document()` had no way to set a document's
+  title independent of the uploaded filename.** Added an optional `title`
+  form field (defaults to the filename, so existing behavior is unchanged).
+- **`docs/knowledge_graph_schema.md`** was referenced in this README's
+  project-layout table but was never actually created (confirmed via
+  `git log` — no commit ever touched `docs/`). Added, reconstructed directly
+  from `GraphStore.init_schema()` / `app/graph/relationships.py` /
+  `app/graph/knowledge_base.py`.
+- **No way to discover document ids or ingestion status without querying
+  Postgres directly.** `POST /admin/documents/{id}/approve` needs an id,
+  but nothing returned one after upload except the single upload response
+  (easy to lose) — there was no listing or detail endpoint. Added
+  `GET /admin/documents` (filterable by `status`/`source_type`/`category_id`,
+  paginated) and `GET /admin/documents/{id}` (single document + `chunk_count`).
+- **`POST /admin/documents/{id}/approve` returned `{"error": "document not
+  found"}` with an HTTP 200 status** for a missing document — a silent
+  failure inconsistent with every other "not found" case in this codebase
+  (`app/api/routes.py`'s `/documents/compare` and `/documents/{id}/summary`
+  both raise `HTTPException(404)`). Now raises 404 consistently; same fix
+  applied to the new `GET /admin/documents/{id}`.
+- **Every admin endpoint's OpenAPI response schema was `{}`** (no
+  `response_model`), so `/docs` and generated clients couldn't tell you
+  what a response actually contains. Added Pydantic response models
+  (`DocumentUploadResponse`, `DocumentListResponse`,
+  `DocumentDetailResponse`, `ApprovalResponse`, `CategoryResponse`,
+  `UsageAnalyticsResponse`) for every admin endpoint that returns
+  structured data.
+- **The "pending" status was undocumented and easy to misread as a stuck
+  processing state.** It isn't — ingestion is fully synchronous (see
+  "Document lifecycle" above) and `status` only tracks admin review.
+  Documented explicitly in the upload/approve endpoint descriptions (visible
+  in `/docs`) and in this README, including the fact that unapproved
+  documents are currently still searchable (flagged as a deliberate
+  not-changed-here item, not silently "fixed" by adding a filter that would
+  change existing behavior).
+
 ## Next steps
 
-1. Fill in `app/evaluation/eval_set.json` with real Q&A pairs and their correct
-   source document IDs, then hit `POST /api/v1/evaluation/run`.
+1. Ingest a real corpus with titles matching `app/evaluation/eval_set.json`
+   (see "Evaluation query set" above), then hit `POST /api/v1/evaluation/run`.
 2. Add a GIN index for Postgres full-text search (see comment in
    `app/search/keyword.py`) before load-testing keyword/hybrid search.
 3. Wire `app/search/context_aware.py::rewrite_query` to a live LLM call —
    it's stubbed to a pass-through for now.
+4. `reciprocal_rank_fusion()` in `app/search/hybrid.py` currently fuses by
+   raw chunk id (`key="id"`, the default). Semantic hits use a Chroma
+   composite id and keyword hits use the Postgres `document_chunks.id` PK —
+   two disjoint id spaces even for the exact same underlying chunk, so
+   "fusion" between the two result lists never actually merges a chunk
+   found by both methods; it just concatenates and re-ranks. Not changed in
+   this pass since switching the fusion key to `document_id` is a real
+   granularity trade-off (chunk-level context in `generate.py`'s citations
+   vs. document-level dedup) rather than a one-line fix — flagging it here
+   for a deliberate decision rather than a silent change.

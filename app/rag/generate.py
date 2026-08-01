@@ -2,6 +2,7 @@ from google import genai
 from google.genai import types
 
 from app.core.config import settings
+from app.rag.gemini_utils import call_with_timeout
 from app.search.hybrid import hybrid_search
 
 _client = genai.Client(api_key=settings.google_api_key)
@@ -23,7 +24,9 @@ def generate_answer(db, query: str, top_k: int = 6) -> dict:
     hits = hybrid_search(db, query, top_k=top_k)
     context = build_context_block(hits)
 
-    response = _client.models.generate_content(
+    response = call_with_timeout(
+        _client.models.generate_content,
+        timeout_seconds=settings.gemini_timeout_seconds,
         model=settings.gemini_model,
         contents=f"Sources:\n{context}\n\nQuestion: {query}",
         config=types.GenerateContentConfig(

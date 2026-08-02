@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head><title>LMS - Vector Databases and Embeddings</title></head>
+<body>
+<h1>Vector Databases and Embeddings</h1>
+
+<h2>Module 1: What an embedding is</h2>
+<p>An embedding is a fixed-length numeric vector that represents the
+meaning of a piece of text, produced by a model like sentence-transformers.
+Texts with similar meaning end up close together in this vector space,
+even if they share few or no exact words — this is what makes semantic
+search possible.</p>
+
+<h2>Module 2: Why you need a vector database</h2>
+<p>Once you have thousands or millions of embedded chunks, finding the
+nearest neighbors to a query embedding by brute-force comparison becomes
+slow. A vector database (ChromaDB, Pinecone, Weaviate, and others)
+builds an index that makes approximate nearest-neighbor search fast at
+scale, and typically supports metadata filtering alongside similarity
+search.</p>
+
+<h2>Module 3: Similarity metrics</h2>
+<p>Cosine similarity is the most common metric for text embeddings — it
+measures the angle between two vectors rather than their magnitude,
+which matters because embedding magnitude often reflects text length
+more than meaning.</p>
+
+<h2>Module 4: Embeddings are not free</h2>
+<p>Every embedding call costs compute time, and re-embedding the same
+text repeatedly wastes it. Embeddings should be generated once at
+ingestion time and stored, not recomputed per query — only the query
+itself gets embedded fresh at search time.</p>
+
+<h2>Module 5: Picking a vector database</h2>
+<p>See "Blog - Choosing a Vector Database" on the engineering blog for
+how this tradeoff played out for EKIE specifically.</p>
+</body>
+</html>

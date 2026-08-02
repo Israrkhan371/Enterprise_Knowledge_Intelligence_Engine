@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head><title>Choosing a Vector Database</title></head>
+<body>
+<article>
+<h1>Choosing a Vector Database</h1>
+<p><em>Ezitech Engineering Blog</em></p>
+
+<p>When we scoped EKIE's embedding pipeline, the vector database choice
+came down to three realistic options: ChromaDB, Pinecone, and Weaviate.
+Here's what actually drove the decision, not just a feature checklist.</p>
+
+<h2>ChromaDB</h2>
+<p>Runs embedded or as a lightweight local service, which matters a lot
+for a project that needs to run entirely via docker-compose without
+external accounts or API keys. Metadata filtering (category, source
+type) is straightforward, and it's simple enough that onboarding a new
+engineer to the vector store takes minutes, not a half-day reading
+someone else's cloud console.</p>
+
+<h2>Pinecone</h2>
+<p>A managed, cloud-hosted vector database with strong scaling
+characteristics for large production workloads. The tradeoff for a
+project like this is that it requires an external account, has usage
+limits on the free tier, and introduces a network dependency for every
+single search — not ideal when the goal is a self-contained,
+reproducible development environment.</p>
+
+<h2>Weaviate</h2>
+<p>Feature-rich, with built-in hybrid search and a GraphQL API, but
+heavier to operate — it wants its own dedicated service with more
+configuration surface than a project this size needs, and much of its
+hybrid-search functionality overlaps with what EKIE already implements
+directly via reciprocal rank fusion over semantic and keyword results.</p>
+
+<h2>The decision</h2>
+<p>ChromaDB won for EKIE: local-first, no external account required,
+good-enough metadata filtering, and low operational overhead for a
+docker-compose-based dev environment. Pinecone or Weaviate would be
+reasonable choices for a production deployment at much larger scale,
+which is explicitly out of scope for this case study.</p>
+</article>
+</body>
+</html>

@@ -1,0 +1,50 @@
+WEBVTT
+
+00:00:00.000 --> 00:00:15.000
+Mentor: Let's walk through how to actually evaluate whether retrieval is
+any good, instead of just eyeballing a few example queries and calling
+it done.
+
+00:00:15.000 --> 00:00:35.000
+Mentor: You need a fixed evaluation set — a list of realistic queries,
+each paired with the documents that are actually the correct answer for
+that query. Without that ground truth, you have no way to measure
+whether a change to your search pipeline made things better or worse.
+
+00:00:35.000 --> 00:00:55.000
+Mentor: Then for each query, you run it through retrieval, take the
+top-k results, and compute three standard metrics: precision at k,
+recall at k, and mean reciprocal rank.
+
+00:00:55.000 --> 00:01:15.000
+Mentor: Precision at k is: of the k documents you retrieved, what
+fraction were actually relevant. Recall at k is: of all the documents
+that were actually relevant, what fraction did you manage to retrieve in
+your top k. Reciprocal rank is one over the position of the first
+relevant result — so if the correct document is ranked first, that's a
+perfect score of 1, and it drops off fast the further down it appears.
+
+00:01:15.000 --> 00:01:35.000
+Intern: What if the eval set references a document that hasn't actually
+been ingested yet — does that just tank the score?
+
+00:01:35.000 --> 00:02:00.000
+Mentor: It shouldn't. If you silently score an unresolvable query as
+zero, that number gets mixed in with real retrieval failures, and you
+can't tell the difference between "the eval fixture has a typo" and
+"retrieval is actually broken." Better to skip it and report the skip
+count separately, so a bad fixture entry doesn't masquerade as a
+retrieval regression.
+
+00:02:00.000 --> 00:02:20.000
+Mentor: One more practical note — don't hardcode document IDs into the
+eval set. IDs are assigned at ingestion time and change every time the
+corpus gets reseeded. Reference documents by title instead, and resolve
+titles to whatever the current IDs are at evaluation time.
+
+00:02:20.000 --> 00:02:30.000
+Intern: That makes sense — otherwise the eval set silently rots the
+first time someone re-ingests everything.
+
+00:02:30.000 --> 00:02:35.000
+Mentor: Exactly right.

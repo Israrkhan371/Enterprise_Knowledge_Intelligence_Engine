@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head><title>LMS - Introduction to RAG Systems</title></head>
+<body>
+<h1>Introduction to Retrieval-Augmented Generation (RAG) Systems</h1>
+
+<h2>Module 1: Why RAG</h2>
+<p>Large language models have two structural limits: a fixed knowledge
+cutoff, and no awareness of an organization's private documents. RAG
+addresses both by retrieving relevant text from a knowledge base at
+query time and feeding it to the model as context, so answers can be
+grounded in current, organization-specific information instead of
+relying only on what the model memorized during training.</p>
+
+<h2>Module 2: The RAG pipeline</h2>
+<p>A RAG system has three stages: (1) ingest documents, split them into
+chunks, and embed each chunk into a vector store; (2) at query time,
+embed the query and retrieve the most similar chunks; (3) pass the
+retrieved chunks plus the original query to an LLM, which generates an
+answer grounded in that context.</p>
+
+<h2>Module 3: Why retrieval quality matters more than the LLM</h2>
+<p>A very capable LLM given irrelevant retrieved context will still
+produce a wrong or hallucinated answer, because it has no way to know
+the context it was given is the wrong context. Most RAG failures trace
+back to retrieval, not generation — which is why evaluation frameworks
+measure retrieval precision/recall/MRR separately from answer quality.</p>
+
+<h2>Module 4: Citations</h2>
+<p>A production RAG system should cite which source document(s) backed
+each claim in its answer, and ideally verify that the citation is
+actually supported by the cited source rather than trusting the model's
+self-reported citation.</p>
+
+<h2>Further reading</h2>
+<p>See "Dense vs Sparse Retrieval - Research Notes" and "Reciprocal Rank
+Fusion - Research Notes" for how EKIE's retrieval layer combines
+multiple search methods.</p>
+</body>
+</html>

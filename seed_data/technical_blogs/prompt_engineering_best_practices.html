@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head><title>Prompt Engineering Best Practices</title></head>
+<body>
+<article>
+<h1>Prompt Engineering Best Practices</h1>
+<p><em>Ezitech Engineering Blog</em></p>
+
+<p>Notes from building EKIE's RAG and document-intelligence prompts —
+things that made a measurable difference versus things that sounded
+good but didn't.</p>
+
+<h2>Ground the model in retrieved context explicitly</h2>
+<p>Don't just paste retrieved chunks into the prompt and hope. Label
+each source clearly (document title, chunk index) so the model can cite
+which source backs which claim, and instruct it explicitly to say when
+the retrieved context doesn't answer the question rather than
+guessing.</p>
+
+<h2>Ask for structured output when you need to parse the response</h2>
+<p>If the caller needs specific fields back — a similarity summary, a
+list of differences, a duplicate-detection verdict — ask for a specific
+format the code can parse reliably, rather than trying to regex a
+free-form paragraph.</p>
+
+<h2>Always set a timeout</h2>
+<p>Every call to an external LLM API needs an explicit timeout and a
+defined fallback. A hanging LLM call blocks whatever endpoint depends on
+it and degrades the whole system's responsiveness, not just that one
+request. EKIE centralizes this in a single call_with_timeout() helper
+used across every Gemini call site, specifically so this isn't
+reimplemented — and potentially forgotten — at each new call site.</p>
+
+<h2>Keep prompts close to the code that uses them</h2>
+<p>Prompts drift out of sync with the code fast if they live in a
+separate docs file. Keeping prompt templates in the same module as the
+function that sends them makes it obvious when a change to the response
+schema requires a matching prompt update.</p>
+
+<h2>Test with adversarial and edge-case inputs, not just the happy path</h2>
+<p>Empty documents, documents with no overlapping content, and near-duplicate
+documents with one sentence different all stress prompts differently
+than a typical well-formed pair — and expose gaps a demo query never
+would.</p>
+</article>
+</body>
+</html>

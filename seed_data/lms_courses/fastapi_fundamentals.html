@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head><title>LMS - FastAPI Fundamentals</title></head>
+<body>
+<h1>FastAPI Fundamentals</h1>
+
+<h2>Module 1: Why FastAPI</h2>
+<p>FastAPI gives you automatic request validation via Pydantic models,
+automatic OpenAPI/Swagger documentation generation, and native async
+support — all relevant for a service like EKIE that fans out to
+multiple backends (Postgres, ChromaDB, Neo4j, an external LLM API) per
+request and benefits from not blocking on each one sequentially.</p>
+
+<h2>Module 2: Routers</h2>
+<p>APIRouter lets you split endpoints into logical modules (e.g. a
+knowledge router for search/RAG endpoints, an admin router for
+upload/approval/analytics endpoints) and mount them under a shared
+prefix in the main app, rather than defining every route in one giant
+file.</p>
+
+<h2>Module 3: Dependency injection</h2>
+<p>FastAPI's Depends() mechanism is commonly used for things like a
+database session — each request gets its own session via a dependency
+function, which FastAPI handles opening and closing around the request
+automatically.</p>
+
+<h2>Module 4: Request/response models</h2>
+<p>Define Pydantic models for request bodies and response shapes.
+FastAPI validates incoming requests against them automatically and
+rejects malformed input before your endpoint code ever runs, and uses
+the same models to generate accurate OpenAPI documentation.</p>
+
+<h2>Module 5: Error handling</h2>
+<p>Raise HTTPException with an appropriate status code (404 for not
+found, 502 for an unexpected upstream failure, 504 for a timeout) rather
+than letting an unhandled exception surface as a generic 500 — callers
+need to be able to distinguish "this doesn't exist" from "something
+timed out" from "something is actually broken."</p>
+</body>
+</html>

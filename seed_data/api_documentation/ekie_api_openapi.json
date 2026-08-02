@@ -1,0 +1,190 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Enterprise Knowledge Intelligence Engine (EKIE) API",
+    "version": "0.2.0",
+    "description": "Central AI intelligence layer over Ezitech's organizational knowledge. All knowledge and admin endpoints are mounted under the /api/v1 prefix."
+  },
+  "paths": {
+    "/api/v1/search/semantic": {
+      "get": {
+        "summary": "Semantic search over the vector store",
+        "description": "Embeds the query and returns the top-k nearest chunks from ChromaDB, optionally scoped to a category.",
+        "parameters": [
+          {"name": "q", "in": "query", "required": true},
+          {"name": "top_k", "in": "query", "required": false},
+          {"name": "category_filter", "in": "query", "required": false}
+        ],
+        "responses": {"200": {"description": "Ranked list of matching chunks with similarity scores"}}
+      }
+    },
+    "/api/v1/search/keyword": {
+      "get": {
+        "summary": "Keyword search via Postgres full-text search",
+        "description": "Runs a to_tsvector/plainto_tsquery lookup backed by the chunks_fts_idx GIN index.",
+        "parameters": [
+          {"name": "q", "in": "query", "required": true},
+          {"name": "top_k", "in": "query", "required": false}
+        ],
+        "responses": {"200": {"description": "Ranked list of matching chunks"}}
+      }
+    },
+    "/api/v1/search/hybrid": {
+      "get": {
+        "summary": "Hybrid search (reciprocal rank fusion of semantic + keyword)",
+        "parameters": [
+          {"name": "q", "in": "query", "required": true},
+          {"name": "top_k", "in": "query", "required": false},
+          {"name": "category_filter", "in": "query", "required": false}
+        ],
+        "responses": {"200": {"description": "Fused, re-ranked list of matching chunks"}}
+      }
+    },
+    "/api/v1/search/metadata": {
+      "get": {
+        "summary": "Metadata-only document search",
+        "description": "Filters documents by category, source type, status, and/or upload-date range without any relevance ranking.",
+        "parameters": [
+          {"name": "category", "in": "query", "required": false},
+          {"name": "source_type", "in": "query", "required": false},
+          {"name": "status", "in": "query", "required": false},
+          {"name": "date_from", "in": "query", "required": false},
+          {"name": "date_to", "in": "query", "required": false},
+          {"name": "top_k", "in": "query", "required": false}
+        ],
+        "responses": {"200": {"description": "List of matching documents"}}
+      }
+    },
+    "/api/v1/ask": {
+      "post": {
+        "summary": "RAG question answering with citation verification",
+        "description": "Rewrites the query using conversation history, generates an answer via hybrid retrieval + Gemini, and verifies citations against the retrieved sources before returning.",
+        "requestBody": {"description": "JSON body: {query: string, history: array, user_id: string|null}"},
+        "responses": {
+          "200": {"description": "Answer, sources, and citation_check result"},
+          "504": {"description": "LLM request timed out"}
+        }
+      }
+    },
+    "/api/v1/documents/compare": {
+      "post": {
+        "summary": "Compare two documents",
+        "description": "Computes embedding similarity, a text diff, and an LLM-generated comparison summary between two documents.",
+        "requestBody": {"description": "JSON body: {document_id_a: string, document_id_b: string}"},
+        "responses": {
+          "200": {"description": "similarity, diff, and summary"},
+          "404": {"description": "One or both documents not found"},
+          "502": {"description": "Document comparison failed unexpectedly"},
+          "504": {"description": "LLM request timed out"}
+        }
+      }
+    },
+    "/api/v1/documents/{document_id}/summary": {
+      "get": {
+        "summary": "On-demand document summary",
+        "parameters": [{"name": "document_id", "in": "path", "required": true}],
+        "responses": {
+          "200": {"description": "LLM-generated summary of the document"},
+          "404": {"description": "document not found"},
+          "504": {"description": "LLM request timed out"}
+        }
+      }
+    },
+    "/api/v1/graph/technology-map": {
+      "get": {
+        "summary": "Technology map derived from entity co-occurrence",
+        "parameters": [{"name": "entity_label", "in": "query", "required": false}],
+        "responses": {"200": {"description": "Technologies and their inferred relationships"}}
+      }
+    },
+    "/api/v1/graph/skill-dependencies": {
+      "get": {
+        "summary": "Skill dependency graph",
+        "parameters": [{"name": "skill", "in": "query", "required": false}],
+        "responses": {"200": {"description": "Prerequisite/dependency chains for a skill"}}
+      }
+    },
+    "/api/v1/graph/relationships/explain": {
+      "get": {
+        "summary": "Explain a single graph relationship",
+        "description": "Returns the inferred relation type, confidence score, reasoning, and supporting evidence for one entity pair.",
+        "parameters": [
+          {"name": "source", "in": "query", "required": true},
+          {"name": "target", "in": "query", "required": true}
+        ],
+        "responses": {"200": {"description": "Relation type, confidence, reasoning, evidence"}}
+      }
+    },
+    "/api/v1/graph/learning-recommendations": {
+      "get": {
+        "summary": "Learning path recommendations",
+        "parameters": [{"name": "user_query_history", "in": "query", "required": false}],
+        "responses": {"200": {"description": "Recommended skills/content based on query history"}}
+      }
+    },
+    "/api/v1/evaluation/run": {
+      "post": {
+        "summary": "Run the retrieval evaluation suite",
+        "description": "Runs every query in eval_set.json through hybrid_search and computes precision@k, recall@k, and MRR, logged to MLflow.",
+        "parameters": [{"name": "k", "in": "query", "required": false}],
+        "responses": {"200": {"description": "precision_at_k, recall_at_k, mrr, num_queries, skipped"}}
+      }
+    },
+    "/api/v1/admin/documents": {
+      "post": {
+        "summary": "Upload a document",
+        "description": "Uploads a file and ingests it through the full pipeline (load -> OCR fallback if needed -> chunk -> embed -> store -> graph populate). Title defaults to the uploaded filename if omitted.",
+        "responses": {"200": {"description": "Created document record, status=pending"}}
+      },
+      "get": {
+        "summary": "List documents",
+        "responses": {"200": {"description": "Paginated list of documents"}}
+      }
+    },
+    "/api/v1/admin/documents/{document_id}": {
+      "get": {
+        "summary": "Get a single document",
+        "parameters": [{"name": "document_id", "in": "path", "required": true}],
+        "responses": {"200": {"description": "Document record"}}
+      }
+    },
+    "/api/v1/admin/documents/{document_id}/approve": {
+      "post": {
+        "summary": "Approve or reject a document",
+        "parameters": [
+          {"name": "document_id", "in": "path", "required": true},
+          {"name": "reviewer", "in": "query", "required": true},
+          {"name": "decision", "in": "query", "required": true},
+          {"name": "comment", "in": "query", "required": false}
+        ],
+        "responses": {"200": {"description": "Approval log entry created"}}
+      }
+    },
+    "/api/v1/admin/categories": {
+      "get": {"summary": "List categories", "responses": {"200": {"description": "List of categories"}}},
+      "post": {
+        "summary": "Create a category",
+        "parameters": [
+          {"name": "name", "in": "query", "required": true},
+          {"name": "description", "in": "query", "required": false}
+        ],
+        "responses": {"200": {"description": "Created category"}}
+      }
+    },
+    "/api/v1/admin/analytics/usage": {
+      "get": {"summary": "Usage analytics", "responses": {"200": {"description": "Query volume, retrieval scores, and helpfulness over time"}}}
+    },
+    "/api/v1/admin/quality/duplicates": {
+      "get": {"summary": "Detect duplicate documents", "responses": {"200": {"description": "Document pairs above the similarity threshold"}}}
+    },
+    "/api/v1/admin/quality/outdated": {
+      "get": {"summary": "Detect outdated documents", "responses": {"200": {"description": "Documents flagged as stale"}}}
+    },
+    "/api/v1/admin/quality/gaps": {
+      "get": {"summary": "Detect missing-documentation gaps", "responses": {"200": {"description": "Low-scoring query clusters indicating missing knowledge"}}}
+    },
+    "/health": {
+      "get": {"summary": "Health check", "responses": {"200": {"description": "{status: ok, version: ...}"}}}
+    }
+  }
+}

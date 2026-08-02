@@ -1,0 +1,49 @@
+WEBVTT
+
+00:00:00.000 --> 00:00:12.000
+Mentor: So today let's talk about chunking strategy, since it trips up
+almost every intern who gets to the embedding pipeline step.
+
+00:00:12.000 --> 00:00:28.000
+Mentor: The core problem is that embedding models have a limited context
+window, and even within that window, embedding quality degrades on very
+long chunks because the vector ends up averaging too many unrelated
+ideas into one point in space.
+
+00:00:28.000 --> 00:00:45.000
+Mentor: So you split documents into chunks small enough to stay
+semantically coherent, but you don't want them too small either, or you
+lose surrounding context a query might need to actually answer a
+question.
+
+00:00:45.000 --> 00:01:05.000
+Mentor: EKIE uses roughly 800-word chunks with 120-word overlap. The
+overlap matters because if a sentence explaining something important
+gets split exactly at a chunk boundary, overlap means it still shows up
+in full inside at least one of the two chunks.
+
+00:01:05.000 --> 00:01:22.000
+Intern: Why 800 words specifically, and not something like 200 or 2000?
+
+00:01:22.000 --> 00:01:50.000
+Mentor: It's a tradeoff. Too small and you fragment ideas across many
+chunks, so semantic search has to guess which fragment matters, and you
+lose surrounding context. Too large and a single chunk covers multiple
+unrelated topics, diluting the embedding, and it also means RAG stuffs
+more irrelevant text into the LLM's context window per retrieved chunk.
+800 words with 120 overlap is a reasonable middle ground for
+prose-heavy documentation, though you'd tune it differently for, say,
+code files.
+
+00:01:50.000 --> 00:02:10.000
+Mentor: One more thing — chunking runs on the embedding-facing text
+only. The knowledge graph's entity extraction step deliberately does NOT
+reuse these chunks; it runs on the full document text in one pass,
+because chunk boundaries would fragment sentences and undercount or
+duplicate entity co-occurrence relationships.
+
+00:02:10.000 --> 00:02:20.000
+Intern: Got it — so chunking is tuned for retrieval, not for NER.
+
+00:02:20.000 --> 00:02:25.000
+Mentor: Exactly.

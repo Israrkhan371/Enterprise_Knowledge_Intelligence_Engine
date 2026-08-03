@@ -63,6 +63,8 @@ print('YOLOX layout model cached at build time')"
 
 COPY app ./app
 COPY tests ./tests
+COPY scripts ./scripts
+COPY seed_data ./seed_data
 
 EXPOSE 8000
 

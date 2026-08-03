@@ -56,12 +56,12 @@ SEED_DATA_DIR = Path(__file__).parent.parent / "seed_data"
 # Title must match eval_set.json's relevant_document_titles exactly.
 SEED_DOCUMENTS = [
     # sop
-    ("sop/mentor_onboarding.md", "SOP - Mentor Onboarding", "sop", "sop"),
-    ("sop/escalation_procedures.md", "SOP - Escalation Procedures", "sop", "sop"),
-    ("sop/incident_response.md", "SOP - Incident Response", "sop", "sop"),
-    ("sop/access_request_process.md", "SOP - Access Request Process", "sop", "sop"),
+    ("sop/mentor_onboarding.md", "SOP - Mentor Onboarding", "markdown", "sop"),
+    ("sop/escalation_procedures.md", "SOP - Escalation Procedures", "markdown", "sop"),
+    ("sop/incident_response.md", "SOP - Incident Response", "markdown", "sop"),
+    ("sop/access_request_process.md", "SOP - Access Request Process", "markdown", "sop"),
     # coding_standards
-    ("coding_standards/code_review_process.md", "SOP - Code Review Process", "sop", "coding_standards"),
+    ("coding_standards/code_review_process.md", "SOP - Code Review Process", "markdown", "coding_standards"),
     ("coding_standards/python_coding_standards.md", "Ezitech Python Coding Standards", "markdown", "coding_standards"),
     # internship_case_studies
     ("internship_case_studies/ezitech_engineering_framework_overview.md", "Ezitech Engineering Framework Overview", "markdown", "internship_case_studies"),

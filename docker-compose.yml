@@ -38,7 +38,7 @@ services:
     environment:
       NEO4J_AUTH: neo4j/ekie_password
     ports:
-      - "7474:7474"
+      - "17474:7474"    
       - "7687:7687"
     volumes:
       - neo4j_data:/data

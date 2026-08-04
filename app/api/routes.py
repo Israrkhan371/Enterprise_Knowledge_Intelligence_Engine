@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -14,7 +14,7 @@ from app.search.metadata import metadata_search
 from app.search.context_aware import rewrite_query
 from app.rag.generate import generate_answer
 from app.rag.citation_check import verify_citations
-from app.rag.intelligence import compare_documents, compare_documents_full, summarize_document_full
+from app.rag.intelligence import compare_documents, compare_documents_full, summarize_document_full, suggest_document_updates
 from app.graph.queries import (
     explain_relationship,
     get_skill_dependencies,
@@ -154,6 +154,19 @@ def summarize(document_id: str, db: Session = Depends(get_db)):
         logger.error("Document summary timed out for document_id=%s.", document_id)
         raise HTTPException(status_code=504, detail="LLM request timed out")
 
+@router.get("/documents/{document_id}/suggest-updates")
+def suggest_updates(document_id: str, db: Session = Depends(get_db)):
+    doc = db.get(Document, document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"document not found: {document_id}")
+    try:
+        return suggest_document_updates(db, document_id)
+    except TimeoutError:
+        logger.error("Suggest-updates timed out for document_id=%s.", document_id)
+        raise HTTPException(status_code=504, detail="LLM request timed out")
+    except Exception:
+        logger.exception("Suggest-updates failed unexpectedly for document_id=%s.", document_id)
+        raise HTTPException(status_code=502, detail="Suggest-updates failed. Please try again later.")
 
 @router.get("/graph/technology-map")
 def technology_map(entity_label: str = "TECH"):
@@ -173,8 +186,8 @@ def relationship_explanation(source: str, target: str):
 
 
 @router.get("/graph/learning-recommendations")
-def learning_recommendations(user_query_history: list[str] = None):
-    return recommend_learning_path(user_query_history or [])
+def learning_recommendations(user_query_history: list[str] = Query(default=[])):
+    return recommend_learning_path(user_query_history)
 
 
 @router.post("/evaluation/run")

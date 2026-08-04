@@ -1,3 +1,4 @@
+from app.graph.extract import extract_entities
 from app.graph.build import GraphStore
 from app.graph.relationships import (
     build_skill_dependency_graph,
@@ -72,13 +73,45 @@ def explain_relationship(source: str, target: str) -> dict:
 
 def recommend_learning_path(user_query_history: list[str]) -> list[dict]:
     """
-    MVP heuristic: pull entities mentioned across a user's recent queries,
-    then surface graph neighbors tagged as LMS/course content they haven't
-    hit yet. Replace with a ranked recommender once usage data accumulates.
+    Extracts entities actually mentioned in the user's recent queries, then
+    surfaces LMS-tagged content connected to those specific entities in the
+    graph - recommendations track what this user has been asking about,
+    not just any LMS content that happens to exist.
+
+    Bug fixed here: the previous implementation took user_query_history as
+    a parameter but never referenced it anywhere in the function body - it
+    ran one static query returning up to 20 arbitrary LMS/entity pairs
+    regardless of what was passed in, silently ignoring the entire point
+    of "query history -> skill graph -> LMS content".
+
+    Falls back to that previous "any LMS content" behavior when there's no
+    query history, or when none of the extracted query entities resolve to
+    anything in the graph (cold start / no matching content yet) - an empty
+    or unmatched history should mean a less targeted result, not an empty
+    one.
     """
     store = GraphStore()
     try:
         with store.driver.session() as session:
+            entity_names: set[str] = set()
+            for query in user_query_history:
+                for ent in extract_entities(query):
+                    entity_names.add(ent["text"])
+
+            if entity_names:
+                result = session.run(
+                    """
+                    MATCH (d:Document)-[:MENTIONS]->(e:Entity)
+                    WHERE d.source_type = 'lms' AND e.name IN $entity_names
+                    RETURN DISTINCT d.title AS course, e.name AS related_entity
+                    LIMIT 20
+                    """,
+                    entity_names=list(entity_names),
+                )
+                rows = [dict(record) for record in result]
+                if rows:
+                    return rows
+
             result = session.run(
                 """
                 MATCH (d:Document)-[:MENTIONS]->(e:Entity)

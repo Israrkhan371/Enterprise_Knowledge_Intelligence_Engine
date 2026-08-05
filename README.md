@@ -445,11 +445,32 @@ mapped to each requirement.
     LMS document tagged with that entity, versus the full generic list
     for a nonsense query — confirming the entity-scoping path genuinely
     fires, not just that the endpoint returns 200.
-  - Known, not-yet-fixed noise: SCORM/LMS content (`load_lms()`'s zip
-    path) produces a couple of low-value entities (a generic word like
-    "Lesson", a literal filename like "lesson1.html") — same general class
-    of NER-on-structured-content noise as the SQL/code-syntax issues
-    documented above, not yet addressed for this specific loader.
+  - Known noise, now fixed: SCORM/LMS content and code files were producing
+    a couple of low-value entities (a generic word like "Lesson", a
+    literal filename like "lesson1.html") — traced to `_FILENAME_PATTERN`,
+    a regex that had been written (with a full docstring) to reject
+    loader-header noise (`load_lms()`'s `"# lesson1.html"`, `load_code()`'s
+    `"# File: utils.py"` both getting tagged PRODUCT/ORG by spaCy) but
+    never actually referenced in `extract_entities()`'s filter chain —
+    defined, never wired. Wiring it in naively would have broken a real
+    `TECH_TERMS` entry: `"Node.js"` matches the filename pattern too
+    (`.js` looks exactly like a code extension). Fixed by checking the
+    TECH gazetteer before the filename check runs — known tech terms are
+    trusted regardless of shape, only non-gazetteer text goes through the
+    filename check. 10 tests (`tests/test_extract_entities.py`), including
+    the Node.js case specifically, all independently traced through the
+    real filter logic and confirmed correct.
+- **MLflow/Prometheus (Week 3 Fri)** — confirmed genuinely working via the
+  MLflow REST API directly, not just "wired": queried
+  `ekie-retrieval-eval`'s real runs and found 3 `FINISHED` entries with
+  distinct real metric values (precision_at_k, recall_at_k, mrr,
+  num_queries per run), not an empty experiment shell. Prometheus
+  confirmed via `/api/v1/query?query=up` showing the `ekie-api` target
+  actively scraped and up. Along the way, a live (transient) Gemini API
+  DNS resolution failure correctly triggered `detect_outdated()`'s
+  `try/except` fallback (`"LLM cross-check failed."`) instead of crashing
+  the request — the graceful-degradation path got an unplanned real stress
+  test and passed.
 
 ## Known setup gotchas (already fixed in this repo — read before "fixing" them again)
 

@@ -39,8 +39,15 @@ def generate_answer(db, query: str, top_k: int = 6) -> dict:
 
     return {
         "answer": answer_text,
+        # Full chunk text, not a truncated preview: this list is fed straight
+        # into verify_citations() (which does sentence-vs-source similarity
+        # checks) and stored on UsageLog for admin answer review. Clipping
+        # it here previously made citation verification compare each
+        # sentence against a truncated source, silently weakening the check
+        # on any chunk longer than 300 characters. Callers that want a
+        # lighter payload for display can truncate client-side.
         "sources": [
-            {"index": i + 1, "document_id": hit.get("document_id", hit.get("id")), "text": hit["text"][:300]}
+            {"index": i + 1, "document_id": hit.get("document_id", hit.get("id")), "text": hit["text"]}
             for i, hit in enumerate(hits)
         ],
     }

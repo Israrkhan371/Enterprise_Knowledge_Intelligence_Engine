@@ -27,7 +27,30 @@ _TECH_CANONICAL = {t.lower(): t for t in TECH_TERMS}
 _STOPLIST = {
     "table", "default", "uuid primary key", "primary key", "attendees",
     "cto", "ceo", "cfo", "vp", "devops", "lead devops", "ai", "api",
+    # SCORM/LMS packaging noise (see _FILENAME_PATTERN docstring below
+    # for the broader class this belongs to) — "scorm"/"imsmanifest"
+    # themselves don't match the filename pattern (no extension), so
+    # they need an explicit stoplist entry rather than the regex catching
+    # them automatically.
+    "scorm", "imsmanifest",
 }
+
+# Rejects entities that are actually filenames/paths, not real-world
+# named entities — found via a real bug: load_lms() prefixes each SCORM
+# zip's HTML file with "# {filename}" (e.g. "# lesson1.html",
+# "# SCORM_content/lesson2.htm") so a multi-lesson course doesn't
+# collapse into one blob; load_code() does the same with "# File:
+# {filename}". Both headers get concatenated straight into the
+# document's prose before NER runs, and spaCy sometimes tags a bare
+# filename as PRODUCT/ORG (it looks like an unusual proper-noun token).
+# This is a general class of noise — any loader-added filename header,
+# not just SCORM specifically — so a pattern match on "looks like a
+# filename" is more robust than stoplisting individual filenames one
+# at a time, which could never keep up with arbitrary real filenames.
+_FILENAME_PATTERN = re.compile(
+    r"^[\w\-./\\]+\.(html?|xml|py|jsx?|tsx?|json|sql|md|txt|zip|ya?ml|csv|ini|cfg|sh)$",
+    re.IGNORECASE,
+)
 
 _LEADING_ARTICLE = re.compile(r"^(the|a|an)\s+", re.IGNORECASE)
 _LEADING_SYMBOLS = re.compile(r"^[-#*>\s]+")
@@ -77,9 +100,17 @@ def extract_entities(text: str) -> list[dict]:
 
         canonical = _TECH_CANONICAL.get(cleaned.lower())
         if canonical:
+            # Known tech terms are checked before the filename-pattern
+            # filter below, not after: "Node.js" is a real TECH_TERMS
+            # entry but also matches _FILENAME_PATTERN (its ".js" suffix
+            # looks exactly like a code-file extension). Gazetteer matches
+            # are trusted regardless of shape; only non-gazetteer text
+            # goes through the filename check.
             cleaned = canonical
             label = "TECH"
         else:
+            if _FILENAME_PATTERN.match(cleaned):
+                continue
             label = ent.label_
 
         key = (cleaned, label)

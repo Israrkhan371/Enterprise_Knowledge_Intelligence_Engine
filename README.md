@@ -11,7 +11,7 @@ Embedding pipeline (sentence-transformers) -> ChromaDB (vector store)
         v
 Entity/relationship extraction (spaCy) -> Neo4j (knowledge graph)
         v
-Search layer: semantic | keyword (Postgres FTS) | hybrid (RRF) | metadata | context-aware
+Search layer: semantic | keyword (Postgres FTS) | hybrid (RRF + cross-encoder rerank) | metadata | context-aware
         v
 RAG answer generation (Google Gemini, free tier) + citation verification
         v
@@ -31,16 +31,27 @@ cp .env.example .env          # fill in GOOGLE_API_KEY (free at https://aistudio
 docker compose up --build
 ```
 
-- API: http://localhost:8000/docs (Swagger UI, auto-generated)
-- Neo4j browser: http://localhost:7474
-- MLflow UI: http://localhost:5000
-- Prometheus: http://localhost:9090
+- API: http://localhost:18000/docs (Swagger UI, auto-generated)
+- Neo4j browser: http://localhost:17474
+- MLflow UI: http://localhost:15000
+- Prometheus: http://localhost:19090
 - `GET /health` returns `{"status": "ok", "version": ...}` — check this
   first if the API's behavior doesn't match what you expect from the
   source (e.g. a field missing from `/docs`/`/openapi.json`): a version
   mismatch there means the running container is stale and needs a rebuild
   (`docker compose up --build`, or `docker compose build --no-cache api`
   if compose is caching layers you don't want).
+
+  Host ports above (18000/17474/15000/19090) are non-default — remapped
+  from Postgres/Neo4j/ChromaDB/MLflow/Prometheus/API's usual ports because
+  Windows' Hyper-V dynamic port exclusion range can silently reserve low
+  ports (5432, 7687, 8000, ...) and make `docker compose up` fail with a
+  "port is not available" bind error. Only the host-side mapping changed —
+  containers still talk to each other over the internal Docker network on
+  the original ports (`postgres:5432`, `neo4j:7687`, etc.), so no
+  application code or `DATABASE_URL`/`NEO4J_URI` needed to change. If your
+  environment doesn't hit this Windows issue, feel free to map these back
+  to the conventional ports in `docker-compose.yml`.
 
 ## Document lifecycle
 
@@ -76,9 +87,9 @@ fix.
 |---|---|
 | `app/ingestion/` | Source loaders, OCR fallback, chunking |
 | `app/embeddings/` | Embedding model wrapper, Chroma vector store |
-| `app/search/` | Semantic, keyword, hybrid, context-aware search |
+| `app/search/` | Semantic, keyword, hybrid (RRF + cross-encoder rerank via `rerank.py`), context-aware search |
 | `app/graph/` | Entity/relationship extraction, Neo4j read/write |
-| `app/rag/` | Answer generation, citation verification, doc intelligence (duplicates, staleness, gaps, comparison, summarization); `gemini_utils.py` holds the shared `call_with_timeout()` used by every Gemini call site |
+| `app/rag/` | Answer generation, citation verification, doc intelligence (duplicates, staleness, gaps, comparison, summarization); `gemini_utils.py` holds the shared `call_with_timeout()` used by every Gemini call site **and** by `app/search/rerank.py`'s cross-encoder call |
 | `app/admin/` | Upload, document listing/detail, approval workflow, categories, analytics, quality endpoints |
 | `app/evaluation/` | Retrieval evaluation harness (precision/recall/MRR), MLflow logging |
 | `app/core/` | Config, DB session, ORM models |
@@ -331,9 +342,67 @@ mapped to each requirement.
   - `get_technology_map`'s `limit` is applied after scoring every edge
     returned by Neo4j, not in the Cypher query itself — wasteful once the
     graph has thousands of edges.
-- **Bonus feature implemented:** AI Citation Verification (`app/rag/citation_check.py`)
-  and Knowledge Gap Detection (`app/rag/intelligence.py::detect_knowledge_gaps`) —
-  both reuse infrastructure already built for the core requirements.
+- **Bonus feature implemented:** AI Citation Verification (`app/rag/citation_check.py`),
+  Document Version Intelligence (`app/rag/version_intelligence.py`), AI Documentation
+  Quality Scoring (`app/rag/quality.py`), and Knowledge Gap Detection
+  (`app/rag/intelligence.py::detect_knowledge_gaps`) — all four reuse infrastructure
+  already built for the core requirements rather than adding new subsystems.
+- **AI Citation Verification** (`verify_citations()` in `app/rag/citation_check.py`,
+  run automatically inside `POST /ask`) parses every `[n]` marker out of the
+  generated answer, splits the answer into sentences, and for each cited
+  sentence embeds it alongside the source chunk it claims to cite and checks
+  cosine similarity (default threshold 0.55). Two failure modes are flagged
+  separately: a citation number with no matching source in the response, and
+  a citation whose sentence isn't actually semantically close to what it
+  cites (an unsupported claim). The verification result is returned inline
+  as `citation_check` and persisted on `UsageLog` (`citation_verified`,
+  `citation_flags`) — an unverified answer is auto-flagged into the admin
+  review queue (`GET /admin/answers?flagged_for_review=true`,
+  `POST /admin/answers/{id}/review`) rather than silently shipped. Covered
+  by `tests/test_citation_check.py` (7 tests: clean citations, missing
+  sources, low-similarity flags, multiple citations per sentence).
+- **Document Version Intelligence** (`app/rag/version_intelligence.py`,
+  `GET /admin/documents/{id}/version-candidates`,
+  `POST /admin/documents/{id}/link-version`,
+  `GET /admin/documents/{id}/version-history`) suggests, records, and
+  traces version relationships between documents:
+  - `detect_version_candidates()` ranks other documents by full-document
+    embedding similarity to the target, restricted to a band between
+    "clearly unrelated" (similarity ≥ 0.75) and "essentially an exact
+    duplicate" (< 0.92 — that upper band is `detect_duplicates()`'s
+    territory instead, on the reasoning that a genuine new version usually
+    has *some* substantive edit, not none). Already-linked documents in
+    either direction are excluded, since those pairs are already resolved
+    rather than merely proposed. This only ever suggests — it never links
+    anything itself.
+  - `link_version()` is the admin-confirmed write: sets
+    `document.supersedes_id`, bumps `document.version` to
+    `supersedes.version + 1`, and marks the superseded document
+    `status="stale"` (a confirmed-replaced signal, distinct from
+    `detect_outdated()`'s time-based staleness heuristic). Rejects a
+    document superseding itself, and walks the target's existing ancestor
+    chain to reject a link that would close a cycle.
+  - `get_version_history()` returns the full chain a document belongs to,
+    oldest first, regardless of where in the chain the requested document
+    sits — it walks backward via `supersedes_id` to the root, then forward
+    from the requested document to the newest version, and marks the
+    newest entry `is_current`.
+  - Covered by `tests/test_version_intelligence.py` (14 tests: candidate
+    threshold boundaries, exclusion of already-linked pairs, self-link and
+    cycle rejection, version-number increments, and history traversal from
+    an arbitrary point in the middle of a chain).
+- **AI Documentation Quality Scoring** (`app/rag/quality.py`,
+  `POST /admin/documents/{id}/score-quality`, `POST /admin/quality/score-all`)
+  produces a deterministic 0–100 breakdown per document — no LLM call, so
+  it's cheap enough to run across the whole corpus on demand. Three
+  weighted components: completeness (0.5, length-based), freshness (0.3,
+  tapers off after `staleness_days`, default 180, since `updated_at`),
+  and originality (0.2, inverse of how strongly the document shows up in
+  `detect_duplicates()`'s pairs — a document that mostly repeats another
+  one contributes little original knowledge to the corpus regardless of
+  its own length or recency). The overall score is persisted to
+  `Document.quality_score` so it's visible from `GET /admin/documents/{id}`
+  without recomputing it.
 - **Duplicate detection** (`GET /admin/quality/duplicates`, `detect_duplicates()`
   in `app/rag/intelligence.py`) flags document pairs with near-identical
   content, via cosine similarity between chunk embeddings (default threshold
@@ -656,6 +725,43 @@ docstring on `run_evaluation()`.
   documents are currently still searchable (flagged as a deliberate
   not-changed-here item, not silently "fixed" by adding a filter that would
   change existing behavior).
+
+- **`hybrid_search()` had no reranking stage** — RRF fusion alone (bi-encoder
+  cosine similarity + BM25-style `ts_rank`) scores the query and each chunk
+  independently, which misses things like word order and negation. Added
+  `app/search/rerank.py`: a `cross-encoder/ms-marco-MiniLM-L-6-v2`
+  cross-encoder (already covered by the existing `sentence-transformers`
+  dependency, no new package) that jointly scores `(query, chunk)` pairs and
+  reorders hybrid search's fused shortlist. On by default
+  (`use_reranker=True` on `hybrid_search()` and the `/search/hybrid` query
+  param); `generate_answer()`/`/ask` and `run_evaluation()` pick it up
+  automatically since they call `hybrid_search()` with defaults.
+  Hardened against three real production risks before submission:
+  - **Unbounded candidate pool.** `rerank_pool_size` can come straight from
+    a caller (the `/search/hybrid` query param), and an unclamped value
+    would force `semantic_search()`/`keyword_search()` to each fetch that
+    many rows and run that many synchronous cross-encoder forward passes —
+    a cheap way to stall the API. Clamped to `settings.rerank_pool_size_max`
+    (default 200) regardless of what's requested.
+  - **Double truncation dropping candidates before reranking.** An earlier
+    version of this reranking stage sliced the fused list down to
+    `pool_size` *before* handing it to the cross-encoder — but RRF can
+    return up to `2 × pool_size` unique items (a chunk found by only one of
+    the two search legs keeps its own slot), so up to half the fused
+    candidates could be discarded before the reranker, the thing best
+    positioned to correctly judge them, ever saw them. Fixed: the full fused
+    list is now passed through.
+  - **No fallback if the cross-encoder fails.** A model-load error, OOM, or
+    timeout previously had no handling and would take down `/search/hybrid`
+    and `/ask` with an unhandled 500, even though good fused results already
+    existed. `hybrid_search()` now catches any reranker exception and falls
+    back to the un-reranked fused list; `rerank()`'s `predict()` call is
+    also wrapped in the same `call_with_timeout()` helper Gemini calls use
+    (new `settings.reranker_timeout_seconds`, default 10s), so a stalled
+    model can't hang a request indefinitely either.
+  Regression-tested in `tests/test_rerank.py` and the reranker-specific
+  tests in `tests/test_hybrid.py` (fusion-only tests there pass
+  `use_reranker=False` to stay fast and network-free).
 
 ## Next steps
 

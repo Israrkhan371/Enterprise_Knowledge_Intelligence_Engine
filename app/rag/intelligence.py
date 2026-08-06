@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.models import Document
 from app.embeddings.embedder import embed_texts
 from app.embeddings.vector_store import get_collection
 from app.ingestion.chunking import chunk_text
@@ -613,3 +614,113 @@ def detect_knowledge_gaps(db: Session, min_score_threshold: float = 0.3, min_occ
         {"threshold": min_score_threshold, "min_occ": min_occurrences},
     ).fetchall()
     return [{"query": r.query, "occurrences": r.occurrences, "avg_score": round(r.avg_score, 3)} for r in rows]
+
+
+def suggest_document_updates(db: Session, document_id: str, staleness_days: int = 180, top_k: int = 3) -> dict | None:
+    """
+    AI capability: Suggest document updates. Unlike detect_outdated() (a pure
+    time-based staleness flag) or version_intelligence's detect_version_candidates()
+    (structural version-linking suggestions), this generates a content-level
+    suggestion of *what* might need updating, grounded in the corpus itself
+    rather than the model's own unsourced knowledge:
+
+    1. Find other documents that are both fresher (updated_at more recent)
+       and topically related (semantic search seeded by this document's own
+       text), so the LLM has something concrete and traceable to compare
+       against instead of inventing gaps from memory.
+    2. If none are found, return a plain "nothing newer to compare against"
+       result rather than asking the LLM to speculate with no grounding.
+    3. Otherwise ask the LLM to point out what the target document may be
+       missing or have superseded, relative *only* to those related
+       documents — same "cite what's actually in the corpus" discipline as
+       app/rag/generate.py's answer citations.
+
+    Returns None if document_id doesn't exist.
+    """
+    document = db.get(Document, document_id)
+    if not document:
+        return None
+
+    is_outdated = False
+    if document.updated_at:
+        is_outdated = document.updated_at < datetime.utcnow() - timedelta(days=staleness_days)
+
+    related: list[dict] = []
+    seed_text = (document.raw_text or document.title or "").strip()
+    if seed_text:
+        # Local import: semantic_search lives in app.search, which itself
+        # doesn't depend on app.rag — importing at module load would risk
+        # a circular import if that ever changes, and this path is only
+        # hit when suggest_document_updates() is actually called.
+        from app.search.semantic import semantic_search
+
+        hits = semantic_search(seed_text[:4000], top_k=top_k * 4)
+        seen_ids = {document_id}
+        for hit in hits:
+            other_id = hit.get("document_id")
+            if not other_id or other_id in seen_ids:
+                continue
+            seen_ids.add(other_id)
+            other = db.get(Document, other_id)
+            if not other or not other.updated_at or not document.updated_at:
+                continue
+            if other.updated_at <= document.updated_at:
+                continue  # only documents genuinely fresher than this one
+            related.append(other)
+            if len(related) >= top_k:
+                break
+
+    if not related:
+        return {
+            "document_id": document_id,
+            "title": document.title,
+            "is_outdated": is_outdated,
+            "related_documents": [],
+            "suggested_updates": (
+                "No fresher, topically related documents were found in the "
+                "corpus to compare against, so no grounded update "
+                "suggestions are available."
+            ),
+        }
+
+    context = "\n\n".join(
+        f"[Related document: {r.title} (last updated {r.updated_at.isoformat()})]\n"
+        f"{(r.raw_text or '')[:2000]}"
+        for r in related
+    )
+    prompt = (
+        "You are reviewing an internal engineering document for staleness. "
+        "Given the TARGET document and several RELATED documents that are "
+        "more recently updated, list concisely what the target document may "
+        "be missing, outdated on, or superseded on. Base every point only on "
+        "what the related documents actually say - do not invent facts. If "
+        "the related documents don't indicate anything the target is missing, "
+        "say so plainly.\n\n"
+        f"TARGET document: {document.title} (last updated "
+        f"{document.updated_at.isoformat() if document.updated_at else 'unknown'})\n"
+        f"{(document.raw_text or '')[:3000]}\n\n"
+        f"RELATED documents:\n{context}"
+    )
+
+    try:
+        suggestions = _generate_content(prompt)
+    except TimeoutError:
+        raise
+    except Exception:
+        logger.exception("LLM update-suggestion generation failed for document_id=%s.", document_id)
+        suggestions = (
+            "Update suggestions unavailable: the suggestion service failed to "
+            "generate a response. Related documents are listed below for "
+            "manual review."
+        )
+
+    return {
+        "document_id": document_id,
+        "title": document.title,
+        "is_outdated": is_outdated,
+        "related_documents": [
+            {"document_id": r.id, "title": r.title, "updated_at": r.updated_at.isoformat()}
+            for r in related
+        ],
+        "suggested_updates": suggestions,
+    }

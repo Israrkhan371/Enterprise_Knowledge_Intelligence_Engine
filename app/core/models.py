@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, String, Text, DateTime, Boolean, ForeignKey, Float, Integer, Index
+from sqlalchemy import Column, String, Text, DateTime, Boolean, ForeignKey, Float, Integer, Index, JSON, literal_column
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -38,6 +38,14 @@ class Document(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # --- Bonus: Document Version Intelligence (app/rag/version_intelligence.py) ---
+    # Self-referential link set by an admin via link_version(), not inferred
+    # automatically - detect_version_candidates() only *suggests* pairs.
+    # A document with supersedes_id set is a newer version of that document;
+    # version increments by 1 down the chain from the root (version=1).
+    supersedes_id = Column(UUID(as_uuid=False), ForeignKey("documents.id"), nullable=True)
+    version = Column(Integer, default=1, nullable=False)
+
     category = relationship("Category", back_populates="documents")
     chunks = relationship("DocumentChunk", back_populates="document")
 
@@ -58,9 +66,22 @@ class DocumentChunk(Base):
         # lookup. Without this, every keyword search does a sequential scan +
         # on-the-fly tsvector build over the whole table. create_all() creates
         # this automatically on Postgres; it's a no-op on other dialects.
+        #
+        # The "english" argument must be injected as a raw literal via
+        # literal_column(), not passed as a plain Python string. Passed as a
+        # string, SQLAlchemy 2.0.35 treats it as a bound parameter typed
+        # REGCONFIG - fine for a normal query, but there is no literal
+        # renderer registered for REGCONFIG, so compiling this as index DDL
+        # (which requires an inline literal, not a bind param) raises
+        # `sqlalchemy.exc.CompileError: No literal value renderer is
+        # available for literal value "'english'" with datatype REGCONFIG`.
+        # This was dormant here because create_all() only emits DDL for
+        # tables that don't exist yet, and document_chunks always already
+        # existed in this environment's Postgres volume - it only surfaced
+        # once startup ran against a genuinely fresh database.
         Index(
             "chunks_fts_idx",
-            func.to_tsvector("english", text),
+            func.to_tsvector(literal_column("'english'"), text),
             postgresql_using="gin",
         ),
     )
@@ -96,4 +117,39 @@ class UsageLog(Base):
     answer = Column(Text, nullable=True)
     retrieval_score = Column(Float, nullable=True)
     was_helpful = Column(Boolean, nullable=True)
+    # Snapshot of the [n]-indexed source chunks the answer was generated
+    # from (same shape as generate_answer()'s "sources"), so the admin
+    # answer-review UI can show exactly what the model saw without
+    # re-running retrieval against a corpus that may have since changed.
+    sources = Column(JSON, nullable=True)
+    # Cached output of app.rag.citation_check.verify_citations() at
+    # answer time, so the review queue doesn't have to recompute
+    # embeddings for every historical answer just to render a list.
+    citation_verified = Column(Boolean, nullable=True)
+    citation_flags = Column(JSON, nullable=True)
+    # True whenever citation verification failed at answer time, or an
+    # admin has explicitly flagged the answer during review. Drives the
+    # "needs attention" admin queue independently of `reviewed`.
+    flagged_for_review = Column(Boolean, default=False, nullable=False)
+    # Whether an admin has recorded a review decision for this answer
+    # (see AnswerReviewLog). Distinct from `flagged_for_review`, which
+    # tracks the outcome rather than whether review happened at all.
+    reviewed = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AnswerReviewLog(Base):
+    """Audit trail of admin review decisions on AI-generated answers.
+
+    Mirrors ApprovalLog's role for documents: one append-only row per
+    review action, while UsageLog.reviewed/flagged_for_review hold the
+    current state for cheap filtering/listing.
+    """
+    __tablename__ = "answer_review_logs"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    usage_log_id = Column(UUID(as_uuid=False), ForeignKey("usage_logs.id"), nullable=False)
+    reviewer = Column(String, nullable=True)
+    decision = Column(String, nullable=False)  # approved, flagged, dismissed
+    comment = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

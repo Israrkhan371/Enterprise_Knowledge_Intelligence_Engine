@@ -87,7 +87,13 @@ def test_generate_answer_returns_answer_and_indexed_sources(mock_hybrid, mock_cl
 
 @patch("app.rag.generate._client")
 @patch("app.rag.generate.hybrid_search")
-def test_generate_answer_truncates_source_text_to_300_chars(mock_hybrid, mock_client):
+def test_generate_answer_keeps_source_text_untruncated(mock_hybrid, mock_client):
+    """Source text is intentionally NOT truncated (see generate.py's inline
+    comment): truncating here would silently weaken
+    verify_citations()'s sentence-vs-source similarity check on chunks
+    longer than 300 characters. This replaces the old
+    test_generate_answer_truncates_source_text_to_300_chars, which asserted
+    the pre-fix (truncating) behavior."""
     long_text = "x" * 1000
     mock_hybrid.return_value = [{"document_id": "doc-1", "text": long_text}]
     mock_response = MagicMock()
@@ -97,7 +103,7 @@ def test_generate_answer_truncates_source_text_to_300_chars(mock_hybrid, mock_cl
     db = object()
     result = generate_answer(db, "query")
 
-    assert len(result["sources"][0]["text"]) == 300
+    assert result["sources"][0]["text"] == long_text
 
 
 @patch("app.rag.generate._client")

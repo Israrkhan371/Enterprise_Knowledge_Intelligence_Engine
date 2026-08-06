@@ -53,8 +53,9 @@ def test_get_document_404_when_missing():
 def test_approve_document_404_when_missing_not_silent_200():
     db = MagicMock()
     db.get.return_value = None
+    admin = MagicMock(email="mentor@ezitech.com")
     with pytest.raises(HTTPException) as exc_info:
-        approve_document("nonexistent-id", reviewer="mentor@ezitech.com", decision="approved", db=db)
+        approve_document("nonexistent-id", decision="approved", admin=admin, db=db)
     assert exc_info.value.status_code == 404
 
 
@@ -62,8 +63,9 @@ def test_approve_document_sets_status_and_logs_decision():
     db = MagicMock()
     document = MagicMock(status="pending")
     db.get.return_value = document
+    admin = MagicMock(email="mentor@ezitech.com")
 
-    result = approve_document("doc-1", reviewer="mentor@ezitech.com", decision="approved", db=db)
+    result = approve_document("doc-1", decision="approved", admin=admin, db=db)
 
     assert document.status == "approved"
     assert result.status == "approved"

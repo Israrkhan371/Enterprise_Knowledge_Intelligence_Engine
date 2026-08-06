@@ -12,7 +12,7 @@ services:
       - ./app:/app/app
     depends_on:
       postgres:
-        condition: service_started
+        condition: service_healthy
       neo4j:
         condition: service_healthy
       chromadb:
@@ -30,6 +30,22 @@ services:
       - "5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      # Postgres reports its container as "started" well before it's ready
+      # to accept connections. Without this healthcheck, api's depends_on
+      # only waited for that early "started" state (condition:
+      # service_started), so a fresh `docker compose up` could race api's
+      # create_all()/alembic startup against Postgres still initializing -
+      # api would crash on connect, `restart: unless-stopped` would loop
+      # it, and if that first successful boot hadn't landed yet when
+      # something ran `docker exec ekie-api pytest`, no tables would exist
+      # at all yet. pg_isready + condition: service_healthy above closes
+      # that race, matching the pattern already used for neo4j below.
+      test: ["CMD-SHELL", "pg_isready -U ekie -d ekie"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
     restart: unless-stopped
 
   neo4j:

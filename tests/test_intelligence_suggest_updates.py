@@ -1,162 +1,152 @@
 """
-Tests for app/rag/intelligence.py::_find_newer_related_documents() and
-suggest_document_updates() - the "Suggest Document Updates" case-study
-requirement (LLM diff vs newer related content), which had no
-implementation at all before this.
+Tests for suggest_document_updates() in app/rag/intelligence.py (Week 3
+checkpoint: "Suggest document updates" AI capability).
 
-Postgres (db.execute), ChromaDB (get_collection, via _fetch_stored_embeddings),
-the embedding model (embed_texts), and the LLM (_generate_content) are all
-mocked. No live services required.
+Follows the same MagicMock db + patched embed_texts/LLM approach as
+tests/test_intelligence_compare.py and tests/test_version_intelligence.py -
+no live model, embedding, or network calls.
 """
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.rag import intelligence
 
 
-def _row(**kwargs):
-    row = MagicMock()
-    for k, v in kwargs.items():
-        setattr(row, k, v)
-    return row
+def _doc(id_, title="doc", raw_text="some text", updated_at=None):
+    d = MagicMock()
+    d.id = id_
+    d.title = title
+    d.raw_text = raw_text
+    d.updated_at = updated_at
+    return d
 
 
-def test_returns_empty_list_when_document_not_found():
+def _mock_db(docs_by_id):
     db = MagicMock()
-    db.execute.return_value.fetchone.return_value = None
-
-    result = intelligence._find_newer_related_documents(db, "missing-doc")
-
-    assert result == []
+    db.get.side_effect = lambda model, id_: docs_by_id.get(id_)
+    return db
 
 
-def test_returns_empty_list_when_target_has_no_chunks():
-    db = MagicMock()
-    db.execute.return_value.fetchone.return_value = _row(id="doc-1", updated_at=datetime.utcnow())
-    db.execute.return_value.fetchall.return_value = []
-
-    result = intelligence._find_newer_related_documents(db, "doc-1")
-
-    assert result == []
+def test_returns_none_when_document_missing():
+    db = _mock_db({})
+    assert intelligence.suggest_document_updates(db, "missing-id") is None
 
 
-def test_returns_empty_list_when_no_newer_candidates_exist():
+def test_no_related_documents_short_circuits_without_llm_call():
+    """No semantic hits at all -> plain no-comparison message, no Gemini call."""
+    target = _doc("a", raw_text="some content", updated_at=datetime.utcnow())
+    db = _mock_db({"a": target})
+
+    with patch("app.search.semantic.semantic_search", return_value=[]) as mock_search, \
+         patch.object(intelligence, "_generate_content") as mock_generate:
+        result = intelligence.suggest_document_updates(db, "a")
+
+    mock_search.assert_called_once()
+    mock_generate.assert_not_called()
+    assert result["document_id"] == "a"
+    assert result["related_documents"] == []
+    assert "No fresher" in result["suggested_updates"]
+
+
+def test_hits_with_no_updated_at_are_skipped_not_fresher():
+    """A related hit whose Document row has no updated_at can't be shown to
+    be fresher, so it's excluded rather than assumed related."""
     now = datetime.utcnow()
-    db = MagicMock()
-    db.execute.return_value.fetchone.return_value = _row(id="doc-1", updated_at=now)
+    target = _doc("a", raw_text="text", updated_at=now)
+    stale_related = _doc("b", raw_text="other text", updated_at=None)
+    db = _mock_db({"a": target, "b": stale_related})
 
-    def fetchall_side_effect():
-        calls = fetchall_side_effect.n
-        fetchall_side_effect.n += 1
-        return [_row(text="chunk", embedding_id="e1")] if calls == 0 else []
-    fetchall_side_effect.n = 0
-    db.execute.return_value.fetchall.side_effect = fetchall_side_effect
+    with patch("app.search.semantic.semantic_search", return_value=[{"document_id": "b"}]), \
+         patch.object(intelligence, "_generate_content") as mock_generate:
+        result = intelligence.suggest_document_updates(db, "a")
 
-    with patch("app.rag.intelligence._fetch_stored_embeddings", return_value={}):
-        with patch("app.rag.intelligence.embed_texts", return_value=[[0.1, 0.2]]):
-            result = intelligence._find_newer_related_documents(db, "doc-1")
-
-    assert result == []
-
-
-def test_ranks_candidates_by_similarity_and_respects_threshold():
-    now = datetime.utcnow()
-    later = now + timedelta(days=5)
-    db = MagicMock()
-    db.execute.return_value.fetchone.return_value = _row(id="doc-1", updated_at=now)
-
-    target_chunks = [_row(text="target chunk", embedding_id="t1")]
-    candidates = [
-        _row(document_id="doc-2", text="close match", embedding_id="c1", title="Close Doc", updated_at=later),
-        _row(document_id="doc-3", text="far match", embedding_id="c2", title="Far Doc", updated_at=later),
-    ]
-
-    fetchall_calls = [target_chunks, candidates]
-    db.execute.return_value.fetchall.side_effect = lambda: fetchall_calls.pop(0)
-
-    with patch("app.rag.intelligence._fetch_stored_embeddings", return_value={}):
-        with patch(
-            "app.rag.intelligence.embed_texts",
-            side_effect=[[[1.0, 0.0]], [[0.99, 0.01], [0.1, 0.99]]],
-        ):
-            result = intelligence._find_newer_related_documents(db, "doc-1", min_similarity=0.75)
-
-    assert len(result) == 1
-    assert result[0]["document_id"] == "doc-2"
-    assert result[0]["title"] == "Close Doc"
-
-
-def test_returns_not_found_message_for_missing_document():
-    db = MagicMock()
-    db.execute.return_value.fetchone.return_value = None
-
-    result = intelligence.suggest_document_updates(db, "missing-doc")
-
-    assert result["message"] == "Document not found."
-    assert result["suggestions"] is None
+    mock_generate.assert_not_called()
     assert result["related_documents"] == []
 
 
-def test_returns_no_related_content_message_when_nothing_newer_found():
-    db = MagicMock()
-    db.execute.return_value.fetchone.return_value = _row(id="doc-1", title="Old Doc", raw_text="old content")
+def test_only_fresher_documents_are_treated_as_related():
+    """An older or equally-old semantic hit is excluded; only a genuinely
+    fresher document counts as 'related' for update suggestions."""
+    now = datetime.utcnow()
+    target = _doc("a", raw_text="text", updated_at=now)
+    older = _doc("b", title="Older Doc", raw_text="old", updated_at=now - timedelta(days=10))
+    fresher = _doc("c", title="Fresher Doc", raw_text="new", updated_at=now + timedelta(days=10))
+    db = _mock_db({"a": target, "b": older, "c": fresher})
 
-    with patch("app.rag.intelligence._find_newer_related_documents", return_value=[]):
-        result = intelligence.suggest_document_updates(db, "doc-1")
+    hits = [{"document_id": "b"}, {"document_id": "c"}]
+    with patch("app.search.semantic.semantic_search", return_value=hits), \
+         patch.object(intelligence, "_generate_content", return_value="Consider adding X.") as mock_generate:
+        result = intelligence.suggest_document_updates(db, "a")
 
-    assert result["title"] == "Old Doc"
-    assert result["suggestions"] is None
+    assert [r["document_id"] for r in result["related_documents"]] == ["c"]
+    mock_generate.assert_called_once()
+    prompt = mock_generate.call_args[0][0]
+    assert "Fresher Doc" in prompt
+    assert "Older Doc" not in prompt
+    assert result["suggested_updates"] == "Consider adding X."
+
+
+def test_duplicate_document_ids_in_hits_are_deduplicated():
+    """Multiple chunk hits from the same document should only count once."""
+    now = datetime.utcnow()
+    target = _doc("a", raw_text="text", updated_at=now)
+    fresher = _doc("c", title="Fresher Doc", raw_text="new", updated_at=now + timedelta(days=10))
+    db = _mock_db({"a": target, "c": fresher})
+
+    hits = [{"document_id": "c"}, {"document_id": "c"}, {"document_id": "c"}]
+    with patch("app.search.semantic.semantic_search", return_value=hits), \
+         patch.object(intelligence, "_generate_content", return_value="ok"):
+        result = intelligence.suggest_document_updates(db, "a")
+
+    assert len(result["related_documents"]) == 1
+
+
+def test_is_outdated_reflects_staleness_window():
+    now = datetime.utcnow()
+    stale_target = _doc("a", raw_text="text", updated_at=now - timedelta(days=400))
+    db = _mock_db({"a": stale_target})
+
+    with patch("app.search.semantic.semantic_search", return_value=[]):
+        result = intelligence.suggest_document_updates(db, "a", staleness_days=180)
+
+    assert result["is_outdated"] is True
+
+
+def test_llm_failure_falls_back_gracefully_but_still_lists_related_docs():
+    now = datetime.utcnow()
+    target = _doc("a", raw_text="text", updated_at=now)
+    fresher = _doc("c", title="Fresher Doc", raw_text="new", updated_at=now + timedelta(days=10))
+    db = _mock_db({"a": target, "c": fresher})
+
+    with patch("app.search.semantic.semantic_search", return_value=[{"document_id": "c"}]), \
+         patch.object(intelligence, "_generate_content", side_effect=RuntimeError("Gemini down")):
+        result = intelligence.suggest_document_updates(db, "a")
+
+    assert "unavailable" in result["suggested_updates"]
+    assert len(result["related_documents"]) == 1  # still populated, unaffected by the LLM failure
+
+
+def test_llm_timeout_propagates_rather_than_being_swallowed():
+    now = datetime.utcnow()
+    target = _doc("a", raw_text="text", updated_at=now)
+    fresher = _doc("c", title="Fresher Doc", raw_text="new", updated_at=now + timedelta(days=10))
+    db = _mock_db({"a": target, "c": fresher})
+
+    with patch("app.search.semantic.semantic_search", return_value=[{"document_id": "c"}]), \
+         patch.object(intelligence, "_generate_content", side_effect=TimeoutError("timed out")):
+        with pytest.raises(TimeoutError):
+            intelligence.suggest_document_updates(db, "a")
+
+
+def test_blank_document_text_skips_semantic_search():
+    target = _doc("a", title="Untitled", raw_text="   ", updated_at=datetime.utcnow())
+    target.title = ""  # both raw_text and title blank -> no seed text at all
+    db = _mock_db({"a": target})
+
+    with patch("app.search.semantic.semantic_search") as mock_search:
+        result = intelligence.suggest_document_updates(db, "a")
+
+    mock_search.assert_not_called()
     assert result["related_documents"] == []
-    assert "No newer related content" in result["message"]
-
-
-def test_calls_llm_with_older_and_newer_content_when_related_docs_found():
-    db = MagicMock()
-    db.execute.return_value.fetchone.side_effect = [
-        _row(id="doc-1", title="Old Doc", raw_text="old content"),
-        _row(raw_text="newer content"),
-    ]
-    related = [{"document_id": "doc-2", "title": "New Doc", "similarity": 0.9, "updated_at": "2026-01-01"}]
-
-    with patch("app.rag.intelligence._find_newer_related_documents", return_value=related):
-        with patch("app.rag.intelligence._generate_content", return_value="Suggestion: update X.") as mock_llm:
-            result = intelligence.suggest_document_updates(db, "doc-1")
-
-    assert result["suggestions"] == "Suggestion: update X."
-    assert result["related_documents"] == related
-    assert result["message"] is None
-    prompt = mock_llm.call_args[0][0]
-    assert "old content" in prompt
-    assert "newer content" in prompt
-
-
-def test_llm_timeout_propagates():
-    db = MagicMock()
-    db.execute.return_value.fetchone.side_effect = [
-        _row(id="doc-1", title="Old Doc", raw_text="old content"),
-        _row(raw_text="newer content"),
-    ]
-    related = [{"document_id": "doc-2", "title": "New Doc", "similarity": 0.9, "updated_at": "2026-01-01"}]
-
-    with patch("app.rag.intelligence._find_newer_related_documents", return_value=related):
-        with patch("app.rag.intelligence._generate_content", side_effect=TimeoutError):
-            try:
-                intelligence.suggest_document_updates(db, "doc-1")
-                assert False, "expected TimeoutError to propagate"
-            except TimeoutError:
-                pass
-
-
-def test_llm_failure_falls_back_to_message_instead_of_raising():
-    db = MagicMock()
-    db.execute.return_value.fetchone.side_effect = [
-        _row(id="doc-1", title="Old Doc", raw_text="old content"),
-        _row(raw_text="newer content"),
-    ]
-    related = [{"document_id": "doc-2", "title": "New Doc", "similarity": 0.9, "updated_at": "2026-01-01"}]
-
-    with patch("app.rag.intelligence._find_newer_related_documents", return_value=related):
-        with patch("app.rag.intelligence._generate_content", side_effect=RuntimeError("gemini down")):
-            result = intelligence.suggest_document_updates(db, "doc-1")
-
-    assert "unavailable" in result["suggestions"].lower()

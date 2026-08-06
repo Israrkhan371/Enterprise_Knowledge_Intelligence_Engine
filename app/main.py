@@ -1,8 +1,13 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from prometheus_client import make_asgi_app
 import time
 
+from alembic import command
+from alembic.config import Config as AlembicConfig
 from neo4j.exceptions import ServiceUnavailable
+from sqlalchemy.exc import OperationalError
 
 from app.core.database import Base, engine
 from app.graph.build import GraphStore
@@ -15,9 +20,46 @@ app = FastAPI(
     version="0.2.0",
 )
 
-# Auto-create tables on startup for local dev.
-# Use Alembic migrations for anything beyond local dev.
-Base.metadata.create_all(bind=engine)
+
+def _init_postgres_schema():
+    # Auto-create brand-new tables on startup for local dev convenience.
+    #
+    # IMPORTANT: create_all() only creates TABLES that don't exist yet — it
+    # does NOT alter existing tables to add columns a model gained later
+    # (e.g. Document.supersedes_id/version). That gap is what let a running
+    # Postgres volume silently drift out of sync with app/core/models.py.
+    # Schema changes to already-existing tables must go through the Alembic
+    # migration below, never through create_all() or manual ALTER TABLEs.
+    Base.metadata.create_all(bind=engine)
+
+    # Apply any pending Alembic migrations (e.g. new columns on tables that
+    # already existed from a previous version of the schema). Safe/idempotent
+    # on every startup: no-ops once the DB is already at head, and each
+    # migration guards its own column-existence checks so it's also a no-op
+    # on a freshly created table where create_all() above just created the
+    # column already.
+    alembic_cfg = AlembicConfig(str(Path(__file__).resolve().parent.parent / "alembic.ini"))
+    command.upgrade(alembic_cfg, "head")
+
+
+# Retry with backoff: docker-compose.yml's healthcheck on the postgres
+# service (condition: service_healthy) normally guarantees Postgres is
+# actually accepting connections before api starts, so this loop shouldn't
+# be hit under Compose. It's a safety net for running the API outside that
+# ordering (e.g. restarting api on its own, or Postgres briefly recycling
+# connections) - without it, a connection race here would crash the app
+# before a single table gets created, same failure mode this whole retry
+# pattern already guards against for Neo4j below.
+_pg_max_attempts = 10
+_pg_delay_seconds = 3
+for _pg_attempt in range(1, _pg_max_attempts + 1):
+    try:
+        _init_postgres_schema()
+        break
+    except OperationalError:
+        if _pg_attempt == _pg_max_attempts:
+            raise
+        time.sleep(_pg_delay_seconds)
 
 # Auto-create Neo4j constraints/indexes on startup for local dev.
 # Safe to run every time - Neo4j no-ops on existing constraints/indexes.

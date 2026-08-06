@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, String, Text, DateTime, Boolean, ForeignKey, Float, Integer, Index, JSON
+from sqlalchemy import Column, String, Text, DateTime, Boolean, ForeignKey, Float, Integer, Index, JSON, literal_column
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -66,9 +66,22 @@ class DocumentChunk(Base):
         # lookup. Without this, every keyword search does a sequential scan +
         # on-the-fly tsvector build over the whole table. create_all() creates
         # this automatically on Postgres; it's a no-op on other dialects.
+        #
+        # The "english" argument must be injected as a raw literal via
+        # literal_column(), not passed as a plain Python string. Passed as a
+        # string, SQLAlchemy 2.0.35 treats it as a bound parameter typed
+        # REGCONFIG - fine for a normal query, but there is no literal
+        # renderer registered for REGCONFIG, so compiling this as index DDL
+        # (which requires an inline literal, not a bind param) raises
+        # `sqlalchemy.exc.CompileError: No literal value renderer is
+        # available for literal value "'english'" with datatype REGCONFIG`.
+        # This was dormant here because create_all() only emits DDL for
+        # tables that don't exist yet, and document_chunks always already
+        # existed in this environment's Postgres volume - it only surfaced
+        # once startup ran against a genuinely fresh database.
         Index(
             "chunks_fts_idx",
-            func.to_tsvector("english", text),
+            func.to_tsvector(literal_column("'english'"), text),
             postgresql_using="gin",
         ),
     )

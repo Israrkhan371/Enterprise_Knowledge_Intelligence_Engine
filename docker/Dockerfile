@@ -65,6 +65,8 @@ COPY app ./app
 COPY tests ./tests
 COPY scripts ./scripts
 COPY seed_data ./seed_data
+COPY alembic ./alembic
+COPY alembic.ini ./alembic.ini
 
 EXPOSE 8000
 

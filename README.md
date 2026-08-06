@@ -474,6 +474,72 @@ mapped to each requirement.
   degrades to a fallback summary string rather than failing the request.
   Missing document IDs return HTTP 404 (previously returned `{"error": ...}`
   with a `200 OK`). Covered by `tests/test_intelligence_summarize.py`.
+- **Outdated detection, suggest-updates, gap detection, learning
+  recommendations** (Week 3 Mon-Thu, `app/rag/intelligence.py`,
+  `app/graph/queries.py`) — four related intelligence features, all
+  verified live against real data, not just mocked tests.
+  - `detect_outdated()` (`GET /admin/quality/outdated`) flags documents
+    past a staleness window (default 180 days). Extended with an opt-in
+    `llm_cross_check` param: for each flagged document, finds newer
+    related content via chunk-embedding similarity
+    (`_find_newer_related_documents()`, reusing `detect_duplicates()`'s
+    pattern) and asks the LLM for a verdict on whether it's genuinely
+    superseded rather than just old — a document can be old but still
+    accurate if nothing newer contradicts it. Off by default (existing
+    behavior unchanged); costs one LLM call per flagged document when on.
+  - `suggest_document_updates()` (`GET /documents/{id}/suggest-updates`,
+    new) — the "Suggest Document Updates" case-study requirement, which
+    had no implementation before this pass. Uses the same
+    `_find_newer_related_documents()` helper, then asks the LLM to name
+    concrete facts in the older document that look contradicted or
+    superseded by the newer content, not just "this is old." Returns a
+    clear "nothing found" message (not an error) when there's no related
+    newer content.
+  - `detect_knowledge_gaps()` (`GET /admin/quality/gaps`) groups
+    `usage_logs` by query text and surfaces recurring low-scoring queries.
+    Found and fixed a `staleness_days`-shaped bug here too (see gotcha #8
+    below) affecting the *sibling* `/quality/outdated` route, not this one
+    — `/quality/gaps` itself was already correctly wired. Verified live
+    with seeded `usage_logs` data (a real 4x-recurring low-scoring query
+    plus a high-scoring control query): the endpoint correctly flagged
+    only the genuine gap and excluded the healthy query, confirming the
+    `HAVING AVG(retrieval_score) < :threshold` filter actually filters.
+  - `recommend_learning_path()` (`GET /graph/learning-recommendations`)
+    had a real bug: it took `user_query_history` as a parameter but never
+    referenced it anywhere in the function body, always running one
+    static query regardless of input. Now extracts entities from the
+    actual query history and scopes the graph query to them, falling back
+    to the previous generic behavior when history is empty or unmatched.
+    Verified live: a query mentioning `"Neo4j"` returned exactly the one
+    LMS document tagged with that entity, versus the full generic list
+    for a nonsense query — confirming the entity-scoping path genuinely
+    fires, not just that the endpoint returns 200.
+  - Known noise, now fixed: SCORM/LMS content and code files were producing
+    a couple of low-value entities (a generic word like "Lesson", a
+    literal filename like "lesson1.html") — traced to `_FILENAME_PATTERN`,
+    a regex that had been written (with a full docstring) to reject
+    loader-header noise (`load_lms()`'s `"# lesson1.html"`, `load_code()`'s
+    `"# File: utils.py"` both getting tagged PRODUCT/ORG by spaCy) but
+    never actually referenced in `extract_entities()`'s filter chain —
+    defined, never wired. Wiring it in naively would have broken a real
+    `TECH_TERMS` entry: `"Node.js"` matches the filename pattern too
+    (`.js` looks exactly like a code extension). Fixed by checking the
+    TECH gazetteer before the filename check runs — known tech terms are
+    trusted regardless of shape, only non-gazetteer text goes through the
+    filename check. 10 tests (`tests/test_extract_entities.py`), including
+    the Node.js case specifically, all independently traced through the
+    real filter logic and confirmed correct.
+- **MLflow/Prometheus (Week 3 Fri)** — confirmed genuinely working via the
+  MLflow REST API directly, not just "wired": queried
+  `ekie-retrieval-eval`'s real runs and found 3 `FINISHED` entries with
+  distinct real metric values (precision_at_k, recall_at_k, mrr,
+  num_queries per run), not an empty experiment shell. Prometheus
+  confirmed via `/api/v1/query?query=up` showing the `ekie-api` target
+  actively scraped and up. Along the way, a live (transient) Gemini API
+  DNS resolution failure correctly triggered `detect_outdated()`'s
+  `try/except` fallback (`"LLM cross-check failed."`) instead of crashing
+  the request — the graceful-degradation path got an unplanned real stress
+  test and passed.
 
 ## Known setup gotchas (already fixed in this repo — read before "fixing" them again)
 
@@ -538,19 +604,31 @@ re-discovers them the hard way on a fresh machine:
    client. If you ever bump `chromadb` in `requirements-lock.txt`, bump the
    compose image tag to match in the same change.
 8. **FastAPI silently drops query/form parameters that aren't declared in
-   the route function's signature — it does not error.** This bit us
-   twice: `ingest_github_repo()` has no admin route at all yet (see the
-   GitHub loader note above), and `semantic_search()`'s `category_filter`
-   parameter was fully implemented, correctly applied, and covered by
-   passing unit tests — but the `/search/semantic` route handler's own
-   signature never declared `category_filter`, so it was accepted and
-   silently discarded from every real HTTP request. Filtered and
-   unfiltered queries returned identical results with no error anywhere in
-   the logs. The lesson: when a search/pipeline function gains a new
-   parameter, grep for every route that calls it and confirm the parameter
-   is threaded all the way from the route signature through — a passing
-   unit test on the underlying function proves nothing about whether the
-   HTTP layer actually exposes it.
+   the route function's signature — it does not error.** This has now bitten
+   us four times, always the same shape: a function gains or already has a
+   parameter, it's correctly implemented and covered by passing unit tests,
+   but the route handler's own signature doesn't declare it — so it's
+   silently discarded from every real HTTP request, with identical results
+   for "filtered" and "unfiltered" calls and no error anywhere in the logs.
+   - `ingest_github_repo()` has no admin route at all yet (see the GitHub
+     loader note above).
+   - `semantic_search()`'s `category_filter` — implemented and tested, but
+     `/search/semantic`'s route signature never declared it.
+   - `detect_outdated()`'s `staleness_days` — `GET /quality/outdated` only
+     declared `llm_cross_check`, so every call silently used the 180-day
+     default regardless of what was requested.
+   - `recommend_learning_path()`'s `user_query_history` — a second, subtler
+     variant: the parameter *was* declared (`list[str] = None`), but without
+     an explicit `Query()` annotation FastAPI doesn't reliably bind a
+     `list[str]` query param at all, so it stayed `None` no matter what was
+     in the URL. Fixed with `Query(default=[])`.
+
+   The lesson holds across all four: when a search/pipeline function gains
+   or already has a parameter, grep for every route that calls it and
+   confirm the parameter is both declared in the route signature *and*
+   correctly annotated for its type (list params specifically need
+   `Query()`, not a bare default) — a passing unit test on the underlying
+   function proves nothing about whether the HTTP layer actually exposes it.
 
 ## Running tests
 

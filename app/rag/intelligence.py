@@ -135,17 +135,254 @@ def detect_duplicates(db: Session, similarity_threshold: float = 0.92) -> list[d
     duplicates.sort(key=lambda d: d["similarity"], reverse=True)
     return duplicates
 
+def _find_newer_related_documents(
+    db: Session, document_id: str, min_similarity: float = 0.75, limit: int = 3
+) -> list[dict]:
+    """
+    Finds other documents whose chunk embeddings are similar to the given
+    document's, restricted to documents updated more recently than it -
+    i.e. "related content that might supersede this one". Shared by
+    suggest_document_updates() and detect_outdated()'s LLM cross-check,
+    since both need the same "what newer content covers similar ground"
+    lookup - kept in one place rather than duplicated.
 
-def detect_outdated(db: Session, staleness_days: int = 180) -> list[dict]:
-    """Flags documents not updated within the staleness window."""
+    Reuses stored chunk embeddings from ChromaDB where available (see
+    detect_duplicates() for the same reasoning), falling back to a fresh
+    embed_texts() call for chunks Chroma doesn't have cached. Returns []
+    (never raises) if the document doesn't exist, has no chunks, or no
+    embeddings could be resolved - "nothing related found" is a normal
+    outcome for callers to handle, not an error.
+    """
+    target = db.execute(
+        text("SELECT id, updated_at FROM documents WHERE id = :id"),
+        {"id": document_id},
+    ).fetchone()
+    if target is None:
+        return []
+
+    target_chunks = db.execute(
+        text("SELECT text, embedding_id FROM document_chunks WHERE document_id = :id"),
+        {"id": document_id},
+    ).fetchall()
+    if not target_chunks:
+        return []
+
+    candidate_rows = db.execute(
+        text(
+            """
+            SELECT dc.document_id, dc.text, dc.embedding_id, d.title, d.updated_at
+            FROM document_chunks dc
+            JOIN documents d ON d.id = dc.document_id
+            WHERE d.id != :id AND d.updated_at > :cutoff
+            """
+        ),
+        {"id": document_id, "cutoff": target.updated_at},
+    ).fetchall()
+    if not candidate_rows:
+        return []
+
+    target_stored = _fetch_stored_embeddings(
+        [r.embedding_id for r in target_chunks if r.embedding_id]
+    )
+    target_vectors = [target_stored.get(r.embedding_id) for r in target_chunks if r.embedding_id]
+    missing_target_texts = [
+        r.text for r in target_chunks if not r.embedding_id or r.embedding_id not in target_stored
+    ]
+    if missing_target_texts:
+        try:
+            target_vectors.extend(embed_texts(missing_target_texts))
+        except Exception:
+            logger.exception(
+                "Embedding failed for target document chunks in _find_newer_related_documents."
+            )
+    target_vectors = [v for v in target_vectors if v is not None]
+    if not target_vectors:
+        return []
+
+    candidate_stored = _fetch_stored_embeddings(
+        [r.embedding_id for r in candidate_rows if r.embedding_id]
+    )
+    candidate_vectors: list[list[float] | None] = [
+        candidate_stored.get(r.embedding_id) if r.embedding_id else None for r in candidate_rows
+    ]
+    missing_idx = [i for i, v in enumerate(candidate_vectors) if v is None]
+    if missing_idx:
+        try:
+            fresh = embed_texts([candidate_rows[i].text for i in missing_idx])
+            for i, vec in zip(missing_idx, fresh):
+                candidate_vectors[i] = vec
+        except Exception:
+            logger.exception(
+                "Embedding failed for candidate document chunks in _find_newer_related_documents."
+            )
+
+    valid = [(row, vec) for row, vec in zip(candidate_rows, candidate_vectors) if vec is not None]
+    if not valid:
+        return []
+
+    target_matrix = np.array(target_vectors, dtype=np.float32)
+    candidate_matrix = np.array([vec for _, vec in valid], dtype=np.float32)
+    sim_matrix = candidate_matrix @ target_matrix.T
+    max_sim_per_candidate = sim_matrix.max(axis=1)
+
+    best_per_doc: dict[str, dict] = {}
+    for (row, _), sim in zip(valid, max_sim_per_candidate):
+        sim = float(sim)
+        if sim < min_similarity:
+            continue
+        doc_id = str(row.document_id)
+        if doc_id not in best_per_doc or sim > best_per_doc[doc_id]["similarity"]:
+            best_per_doc[doc_id] = {
+                "document_id": doc_id,
+                "title": row.title,
+                "similarity": round(sim, 3),
+                "updated_at": row.updated_at.isoformat(),
+            }
+
+    ranked = sorted(best_per_doc.values(), key=lambda d: d["similarity"], reverse=True)
+    return ranked[:limit]
+
+
+def suggest_document_updates(db: Session, document_id: str) -> dict:
+    """
+    Case study requirement: "Suggest Document Updates" - LLM diff vs newer
+    related content.
+
+    Finds newer documents covering similar ground (via chunk-embedding
+    similarity), then asks the LLM to identify concrete ways the target
+    document may be out of date relative to that newer content - what
+    specifically looks superseded or contradicted, not just "this is old".
+
+    Returns a clear "nothing found" result (not an error) when there's no
+    newer related content - "no suggestions" is a normal, valid outcome.
+    """
+    target = db.execute(
+        text("SELECT id, title, raw_text FROM documents WHERE id = :id"),
+        {"id": document_id},
+    ).fetchone()
+    if target is None:
+        return {
+            "document_id": document_id,
+            "title": None,
+            "suggestions": None,
+            "related_documents": [],
+            "message": "Document not found.",
+        }
+
+    related = _find_newer_related_documents(db, document_id)
+    if not related:
+        return {
+            "document_id": document_id,
+            "title": target.title,
+            "suggestions": None,
+            "related_documents": [],
+            "message": "No newer related content found - nothing to suggest updates from.",
+        }
+
+    related_texts = []
+    for r in related:
+        row = db.execute(
+            text("SELECT raw_text FROM documents WHERE id = :id"),
+            {"id": r["document_id"]},
+        ).fetchone()
+        related_texts.append(
+            f"[{r['title']}, updated {r['updated_at']}]\n{(row.raw_text or '')[:_MAX_INLINE_CHARS]}"
+        )
+
+    prompt = (
+        "You are reviewing whether an older document needs updates based on "
+        "newer related content. Identify specific facts, figures, or "
+        "statements in the OLDER document that appear outdated, contradicted, "
+        "or superseded by the NEWER content. Be specific and concrete - cite "
+        "what changed, not just that time has passed. If nothing meaningful "
+        "has changed, say so plainly.\n\n"
+        f"OLDER document ({target.title}):\n{(target.raw_text or '')[:_MAX_INLINE_CHARS]}\n\n"
+        "NEWER related content:\n" + "\n\n".join(related_texts)
+    )
+
+    try:
+        suggestions = _generate_content(prompt)
+    except TimeoutError:
+        raise
+    except Exception:
+        logger.exception("LLM call failed in suggest_document_updates; returning fallback message.")
+        suggestions = "Suggestions unavailable: the update-suggestion service failed to generate a response."
+
+    return {
+        "document_id": document_id,
+        "title": target.title,
+        "suggestions": suggestions,
+        "related_documents": related,
+        "message": None,
+    }
+
+def detect_outdated(
+    db: Session, staleness_days: int = 180, llm_cross_check: bool = False
+) -> list[dict]:
+    """
+    Flags documents not updated within the staleness window.
+
+    When llm_cross_check=True, each flagged document is additionally
+    checked against newer related content (via _find_newer_related_documents)
+    and the LLM is asked for a brief verdict on whether it looks genuinely
+    superseded - a document can be old but still fully accurate if nothing
+    newer contradicts it, so age alone isn't proof of being outdated. This
+    is opt-in and off by default, since it costs one LLM call per flagged
+    document rather than being a free heuristic like the base check.
+    """
     cutoff = datetime.utcnow() - timedelta(days=staleness_days)
     rows = db.execute(
         text("SELECT id, title, updated_at FROM documents WHERE updated_at < :cutoff"),
         {"cutoff": cutoff},
     ).fetchall()
-    return [{"document_id": str(r.id), "title": r.title, "last_updated": r.updated_at.isoformat()} for r in rows]
 
+    results = [
+        {"document_id": str(r.id), "title": r.title, "last_updated": r.updated_at.isoformat()}
+        for r in rows
+    ]
 
+    if not llm_cross_check:
+        return results
+
+    for result in results:
+        related = _find_newer_related_documents(db, result["document_id"])
+        if not related:
+            result["llm_verdict"] = "No newer related content found to cross-check against."
+            continue
+
+        target = db.execute(
+            text("SELECT raw_text FROM documents WHERE id = :id"),
+            {"id": result["document_id"]},
+        ).fetchone()
+        related_texts = []
+        for r in related:
+            row = db.execute(
+                text("SELECT raw_text FROM documents WHERE id = :id"),
+                {"id": r["document_id"]},
+            ).fetchone()
+            related_texts.append(f"[{r['title']}]\n{(row.raw_text or '')[:_MAX_INLINE_CHARS]}")
+
+        prompt = (
+            "Does the OLDER document below appear genuinely outdated or "
+            "contradicted by the NEWER related content? Give a brief verdict "
+            "(1-2 sentences) - either confirm it looks superseded and say how, "
+            "or say it still looks accurate despite its age.\n\n"
+            f"OLDER document:\n{(target.raw_text or '')[:_MAX_INLINE_CHARS]}\n\n"
+            "NEWER related content:\n" + "\n\n".join(related_texts)
+        )
+        try:
+            result["llm_verdict"] = _generate_content(prompt)
+        except TimeoutError:
+            raise
+        except Exception:
+            logger.exception(
+                "LLM cross-check failed for document_id=%s in detect_outdated.",
+                result["document_id"],
+            )
+            result["llm_verdict"] = "LLM cross-check failed."
+
+    return results
+    
 def _generate_content(prompt: str) -> str:
     """
     Single point of contact with the Gemini text-generation API. Wraps the

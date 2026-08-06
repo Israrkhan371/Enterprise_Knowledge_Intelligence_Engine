@@ -587,8 +587,12 @@ def quality_duplicates(db: Session = Depends(get_db)):
 
 
 @router.get("/quality/outdated")
-def quality_outdated(db: Session = Depends(get_db)):
-    return detect_outdated(db)
+def quality_outdated(
+    staleness_days: int = 180,
+    llm_cross_check: bool = False,
+    db: Session = Depends(get_db),
+):
+    return detect_outdated(db, staleness_days=staleness_days, llm_cross_check=llm_cross_check)
 
 
 @router.get("/quality/gaps")

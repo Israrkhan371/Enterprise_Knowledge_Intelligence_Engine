@@ -120,10 +120,14 @@ mapped to each requirement.
   (one per file) instead of `str` like every other loader, so it is
   **deliberately excluded** from `SOURCE_LOADERS` and routed instead through
   `ingest_github_repo()` in `pipeline.py`, which fans each file out into its
-  own `Document` row. **There is currently no REST/admin endpoint that calls
-  `ingest_github_repo()`** — it must be invoked directly in Python
-  (`docker exec -it ekie-api python`) until an admin route is added; every
-  other loader is reachable via `POST /admin/documents/upload`. It also
+  own `Document` row. **`ingest_github_repo()` is reachable via
+  `POST /admin/documents/ingest-github`** (added in the Week 3 enhancement
+  pass, 2026-08-05; every other loader is reachable via
+  `POST /admin/documents/upload` instead, since it takes a single file
+  rather than a whole repo). Note: this route has no dedicated test
+  coverage yet — `test_seed_corpus.py`/`test_loaders.py` only reference
+  `ingest_github_repo()` in passing, not the HTTP route itself; see "Next
+  steps". It also
   recurses into subfolders (depth-guarded, with a directory exclusion list
   for `.git`/`node_modules`/`__pycache__`/etc.) — an earlier version only
   pulled root-level files, caught via manual testing against the real EKIE
@@ -156,8 +160,8 @@ mapped to each requirement.
   (`chunks_fts_idx` on `document_chunks`, declared in `app/core/models.py`
   via `Index(..., postgresql_using="gin")` so `create_all()` creates it —
   confirmed live via `pg_indexes`, added 2026-07-30). Covered by
-  `tests/test_keyword.py` (7 tests, mocked at the query level) and
-  `tests/test_keyword_search_integration.py` (11 tests: real loader → real
+  `tests/test_keyword.py` (8 tests, mocked at the query level) and
+  `tests/test_keyword_search_integration.py` (12 tests: real loader → real
   chunker → real Postgres write → `keyword_search()`, one per source type,
   GitHub mocked to avoid a live network call; PDF is `@pytest.mark.skip`ed
   pending a real `tests/fixtures/sample.pdf`, same as `test_loaders.py`'s
@@ -281,7 +285,7 @@ mapped to each requirement.
   edges into ecosystems, `GET /graph/skill-dependencies` orders `PREREQUISITE_OF`
   edges into a learning path, cross-checked against a curated skill chain so an
   inferred edge can't introduce a contradiction/cycle.
-  Verified so far: 87 tests covering confidence-scoring bounds, direction
+  Verified so far: 29 tests covering confidence-scoring bounds, direction
   canonicalization, weak-evidence demotion, ecosystem grouping, skill-chain
   ordering, evidence-window scoping, and the co-occurrence idempotency guard
   (below), all passing without needing Neo4j or the spaCy model except where
@@ -775,8 +779,10 @@ docstring on `run_evaluation()`.
    Neo4j instance — the accumulate-across-documents Cypher has only been
    reasoned through and mock-tested so far (see "Technology maps & skill
    dependencies" above).
-3. Add an admin/REST route for `ingest_github_repo()` — it currently only
-   runs via a direct Python shell (`docker exec -it ekie-api python`).
+3. Add dedicated test coverage for `POST /admin/documents/ingest-github`
+   (the route now exists — added 2026-08-05 — but has no route-level
+   test, only incidental string references in `test_seed_corpus.py`/
+   `test_loaders.py`).
 4. Add `tests/fixtures/sample.pdf` so `test_load_pdf_on_real_sample_if_present`
    (`test_loaders.py`) and `test_keyword_search_finds_pdf_content`
    (`test_keyword_search_integration.py`) can run instead of skipping.

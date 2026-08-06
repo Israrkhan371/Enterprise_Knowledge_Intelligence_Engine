@@ -120,14 +120,15 @@ mapped to each requirement.
   (one per file) instead of `str` like every other loader, so it is
   **deliberately excluded** from `SOURCE_LOADERS` and routed instead through
   `ingest_github_repo()` in `pipeline.py`, which fans each file out into its
-  own `Document` row. **`ingest_github_repo()` is reachable via
-  `POST /admin/documents/ingest-github`** (added in the Week 3 enhancement
+  own `Document` row. `ingest_github_repo()` is reachable via
+  `POST /admin/documents/ingest-github` (added in the Week 3 enhancement
   pass, 2026-08-05; every other loader is reachable via
   `POST /admin/documents/upload` instead, since it takes a single file
-  rather than a whole repo). Note: this route has no dedicated test
-  coverage yet — `test_seed_corpus.py`/`test_loaders.py` only reference
-  `ingest_github_repo()` in passing, not the HTTP route itself; see "Next
-  steps". It also
+  rather than a whole repo). Covered by `tests/test_admin_ingest_github.py`
+  (6 tests: argument wiring to `ingest_github_repo()`, `category_id`/
+  `github_token` defaulting to `None`, `uploaded_by` always coming from
+  the authenticated admin rather than a client-supplied field, empty-repo
+  handling, and `file_count`/`document_ids` staying in sync). It also
   recurses into subfolders (depth-guarded, with a directory exclusion list
   for `.git`/`node_modules`/`__pycache__`/etc.) — an earlier version only
   pulled root-level files, caught via manual testing against the real EKIE
@@ -779,18 +780,14 @@ docstring on `run_evaluation()`.
    Neo4j instance — the accumulate-across-documents Cypher has only been
    reasoned through and mock-tested so far (see "Technology maps & skill
    dependencies" above).
-3. Add dedicated test coverage for `POST /admin/documents/ingest-github`
-   (the route now exists — added 2026-08-05 — but has no route-level
-   test, only incidental string references in `test_seed_corpus.py`/
-   `test_loaders.py`).
-4. Add `tests/fixtures/sample.pdf` so `test_load_pdf_on_real_sample_if_present`
+3. Add `tests/fixtures/sample.pdf` so `test_load_pdf_on_real_sample_if_present`
    (`test_loaders.py`) and `test_keyword_search_finds_pdf_content`
    (`test_keyword_search_integration.py`) can run instead of skipping.
-5. Batch `upsert_cooccurrence`'s per-pair Neo4j round trips before any large
+4. Batch `upsert_cooccurrence`'s per-pair Neo4j round trips before any large
    bulk repo ingest — currently three round trips per unique entity pair per
    document, fine at current volume but not at scale (see documented
    limitation above).
-6. Cross-document entity resolution (the same person/tool named differently
+5. Cross-document entity resolution (the same person/tool named differently
    across two separate uploads currently creates two graph nodes) —
    deliberately deferred; needs fuzzy/LLM-based matching with real
    false-positive risk, not a quick fix.

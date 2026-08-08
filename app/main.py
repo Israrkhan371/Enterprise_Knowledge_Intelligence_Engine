@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from prometheus_client import make_asgi_app
 import time
 
@@ -95,3 +96,12 @@ app.mount("/metrics", make_asgi_app())
 @app.get("/health")
 def health():
     return {"status": "ok", "version": app.version}
+
+
+# Frontend last: a Mount only catches paths not already matched by a route
+# registered above it, so this can never shadow /api/v1/*, /health, or
+# /metrics regardless of mounting it at "/" — but it must still be added
+# after those routes for that ordering to hold.
+_frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
+if _frontend_dir.is_dir():
+    app.mount("/", StaticFiles(directory=str(_frontend_dir), html=True), name="frontend")

@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EKIE — Enterprise Knowledge Intelligence Engine</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+
+<div class="signal-bar" id="signalBar">
+  <div class="signal-brand">
+    <span class="signal-brand-mark">◆</span>
+    <span>EKIE</span>
+    <span class="signal-brand-sub">knowledge engine</span>
+  </div>
+  <div class="signal-readouts" id="signalReadouts">
+    <div class="signal-item"><span class="signal-value" data-signal="docs">—</span><span class="signal-label">documents indexed</span></div>
+    <div class="signal-item"><span class="signal-value" data-signal="queries">—</span><span class="signal-label">questions answered</span></div>
+    <div class="signal-item"><span class="signal-value" data-signal="flagged">—</span><span class="signal-label">flagged for review</span></div>
+    <div class="signal-item"><span class="signal-value" data-signal="verified">—</span><span class="signal-label">citation-verified</span></div>
+  </div>
+  <div class="signal-status" id="apiStatus"><span class="dot"></span><span class="status-text">connecting</span></div>
+</div>
+
+<nav class="tabnav" id="tabnav">
+  <button class="tab active" data-tab="ask">Ask</button>
+  <button class="tab" data-tab="search">Search</button>
+  <button class="tab" data-tab="graph">Knowledge Graph</button>
+  <div class="tab-divider"></div>
+  <button class="tab" data-tab="documents">Documents</button>
+  <button class="tab" data-tab="answers">Answer Review</button>
+  <button class="tab" data-tab="quality">Quality &amp; Gaps</button>
+  <button class="tab" data-tab="analytics">Analytics</button>
+  <button class="tab" data-tab="categories">Categories</button>
+  <div class="tab-divider"></div>
+  <button class="tab tab-settings" data-tab="settings">⚙ Admin</button>
+</nav>
+
+<main id="app">
+
+  <!-- ASK -->
+  <section class="panel active" id="panel-ask">
+    <div class="panel-head">
+      <h1>Ask the knowledge base</h1>
+      <p class="panel-sub">Answers are grounded only in ingested documents, with numbered citations mapped to real sources.</p>
+    </div>
+    <form id="askForm" class="ask-form">
+      <input type="text" id="askInput" placeholder="e.g. What is the incident response procedure for a SEV-1?" autocomplete="off" required>
+      <button type="submit" class="btn btn-primary">Ask</button>
+    </form>
+    <div id="askThread" class="ask-thread"></div>
+  </section>
+
+  <!-- SEARCH -->
+  <section class="panel" id="panel-search">
+    <div class="panel-head">
+      <h1>Search</h1>
+      <p class="panel-sub">Five retrieval paths over the same corpus — compare how each ranks the same query.</p>
+    </div>
+    <form id="searchForm" class="search-form">
+      <input type="text" id="searchInput" placeholder="Search query…" autocomplete="off" required>
+      <select id="searchMode">
+        <option value="hybrid">Hybrid (semantic + keyword, reranked)</option>
+        <option value="semantic">Semantic</option>
+        <option value="keyword">Keyword (full-text)</option>
+        <option value="metadata">Metadata filter</option>
+        <option value="context-aware">Context-aware</option>
+      </select>
+      <button type="submit" class="btn btn-primary">Search</button>
+    </form>
+    <div id="metadataFilters" class="metadata-filters hidden">
+      <input type="text" id="metaCategory" placeholder="category">
+      <input type="text" id="metaSourceType" placeholder="source_type (e.g. pdf, docx, markdown)">
+      <input type="text" id="metaStatus" placeholder="status">
+    </div>
+    <div id="searchMeta" class="search-meta"></div>
+    <div id="searchResults" class="results-list"></div>
+  </section>
+
+  <!-- GRAPH -->
+  <section class="panel" id="panel-graph">
+    <div class="panel-head">
+      <h1>Knowledge graph</h1>
+      <p class="panel-sub">Relationships inferred from real co-occurrence and dependency evidence across the corpus.</p>
+    </div>
+    <div class="graph-grid">
+      <div class="card">
+        <h2>Technology map</h2>
+        <div class="inline-controls">
+          <input type="text" id="techLabelInput" value="TECH" placeholder="entity_label">
+          <button class="btn btn-ghost" id="loadTechMap">Load</button>
+        </div>
+        <div id="techMapOut" class="graph-out"></div>
+      </div>
+      <div class="card">
+        <h2>Skill dependencies</h2>
+        <div class="inline-controls">
+          <input type="text" id="skillInput" placeholder="skill (optional, e.g. FastAPI)">
+          <button class="btn btn-ghost" id="loadSkills">Load</button>
+        </div>
+        <div id="skillsOut" class="graph-out"></div>
+      </div>
+      <div class="card">
+        <h2>Explain a relationship</h2>
+        <div class="inline-controls">
+          <input type="text" id="relSource" placeholder="source entity">
+          <input type="text" id="relTarget" placeholder="target entity">
+          <button class="btn btn-ghost" id="loadExplain">Explain</button>
+        </div>
+        <div id="explainOut" class="graph-out"></div>
+      </div>
+      <div class="card">
+        <h2>Learning recommendations</h2>
+        <div class="inline-controls">
+          <input type="text" id="learnHistory" placeholder="comma-separated recent queries">
+          <button class="btn btn-ghost" id="loadLearning">Load</button>
+        </div>
+        <div id="learningOut" class="graph-out"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DOCUMENTS (admin) -->
+  <section class="panel" id="panel-documents">
+    <div class="panel-head">
+      <h1>Documents</h1>
+      <p class="panel-sub">Upload, review, and manage the ingested corpus.</p>
+    </div>
+
+    <div class="card">
+      <h2>Upload a document</h2>
+      <form id="uploadForm" class="upload-form">
+        <input type="file" id="uploadFile" required>
+        <input type="text" id="uploadSourceType" placeholder="source_type (e.g. pdf, docx, markdown, code…)" required>
+        <input type="text" id="uploadTitle" placeholder="title (optional)">
+        <input type="text" id="uploadCategoryId" placeholder="category_id (optional)">
+        <button type="submit" class="btn btn-primary">Upload &amp; ingest</button>
+      </form>
+      <div id="uploadResult" class="inline-result"></div>
+      <details class="github-ingest">
+        <summary>Ingest a GitHub repository instead</summary>
+        <form id="githubForm" class="upload-form">
+          <input type="text" id="ghUrl" placeholder="https://github.com/owner/repo" required>
+          <input type="text" id="ghToken" placeholder="access token (private repos only)">
+          <button type="submit" class="btn btn-ghost">Ingest repo</button>
+        </form>
+        <div id="githubResult" class="inline-result"></div>
+      </details>
+    </div>
+
+    <div class="card">
+      <div class="card-head-row">
+        <h2>Corpus</h2>
+        <div class="inline-controls">
+          <select id="docStatusFilter">
+            <option value="">any status</option>
+            <option value="pending">pending</option>
+            <option value="approved">approved</option>
+            <option value="rejected">rejected</option>
+            <option value="stale">stale</option>
+          </select>
+          <input type="text" id="docSourceTypeFilter" placeholder="source_type">
+          <button class="btn btn-ghost" id="reloadDocs">Refresh</button>
+        </div>
+      </div>
+      <div id="docsTable" class="data-table"></div>
+    </div>
+
+    <div id="docDetail" class="drawer hidden"></div>
+  </section>
+
+  <!-- ANSWERS (admin) -->
+  <section class="panel" id="panel-answers">
+    <div class="panel-head">
+      <h1>Answer review</h1>
+      <p class="panel-sub">Every AI-generated answer, with citation verification status.</p>
+    </div>
+    <div class="card">
+      <div class="card-head-row">
+        <h2>Queue</h2>
+        <div class="inline-controls">
+          <select id="ansFlaggedFilter">
+            <option value="">any</option>
+            <option value="true">flagged</option>
+            <option value="false">not flagged</option>
+          </select>
+          <select id="ansReviewedFilter">
+            <option value="">any</option>
+            <option value="false">awaiting review</option>
+            <option value="true">reviewed</option>
+          </select>
+          <input type="text" id="ansSearchFilter" placeholder="search query text">
+          <button class="btn btn-ghost" id="reloadAnswers">Refresh</button>
+        </div>
+      </div>
+      <div id="answersTable" class="data-table"></div>
+    </div>
+    <div id="ansDetail" class="drawer hidden"></div>
+  </section>
+
+  <!-- QUALITY -->
+  <section class="panel" id="panel-quality">
+    <div class="panel-head">
+      <h1>Quality &amp; knowledge gaps</h1>
+      <p class="panel-sub">Duplicate detection, staleness, unanswered query clusters, and missing-topic alerts.</p>
+    </div>
+    <div class="quality-grid">
+      <div class="card">
+        <div class="card-head-row"><h2>Documentation quality scores</h2>
+          <button class="btn btn-ghost" id="runScoreAll">Score all documents</button>
+        </div>
+        <div id="scoresOut" class="data-table"></div>
+      </div>
+      <div class="card">
+        <div class="card-head-row"><h2>Duplicate documents</h2>
+          <button class="btn btn-ghost" id="loadDuplicates">Load</button>
+        </div>
+        <div id="duplicatesOut" class="data-table"></div>
+      </div>
+      <div class="card">
+        <div class="card-head-row"><h2>Outdated documents</h2>
+          <div class="inline-controls">
+            <input type="number" id="staleDays" value="180" style="width:5.5rem">
+            <label class="checkbox-label"><input type="checkbox" id="llmCrossCheck"> LLM cross-check</label>
+            <button class="btn btn-ghost" id="loadOutdated">Load</button>
+          </div>
+        </div>
+        <div id="outdatedOut" class="data-table"></div>
+      </div>
+      <div class="card">
+        <div class="card-head-row"><h2>Knowledge gaps</h2>
+          <button class="btn btn-ghost" id="loadGaps">Load</button>
+        </div>
+        <div id="gapsOut" class="data-table"></div>
+      </div>
+      <div class="card span-2">
+        <div class="card-head-row"><h2>Missing knowledge alerts</h2>
+          <div class="inline-controls">
+            <input type="number" id="minMentions" value="3" style="width:5.5rem">
+            <button class="btn btn-ghost" id="loadMissing">Load</button>
+          </div>
+        </div>
+        <div id="missingOut" class="data-table"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ANALYTICS -->
+  <section class="panel" id="panel-analytics">
+    <div class="panel-head">
+      <h1>Usage analytics</h1>
+      <p class="panel-sub">How the knowledge base is actually being used.</p>
+    </div>
+    <div class="card">
+      <div id="analyticsSummary" class="stat-grid"></div>
+    </div>
+    <div class="card">
+      <div class="card-head-row"><h2>Daily query volume</h2>
+        <div class="inline-controls">
+          <input type="number" id="daysInput" value="14" style="width:5.5rem">
+          <button class="btn btn-ghost" id="loadTimeseries">Load</button>
+        </div>
+      </div>
+      <div id="timeseriesChart" class="chart"></div>
+    </div>
+    <div class="card">
+      <div class="card-head-row"><h2>Top queries</h2>
+        <button class="btn btn-ghost" id="loadTopQueries">Load</button>
+      </div>
+      <div id="topQueriesOut" class="data-table"></div>
+    </div>
+  </section>
+
+  <!-- CATEGORIES -->
+  <section class="panel" id="panel-categories">
+    <div class="panel-head">
+      <h1>Categories</h1>
+      <p class="panel-sub">Organize the corpus for metadata search and admin filtering.</p>
+    </div>
+    <div class="card">
+      <form id="categoryForm" class="upload-form">
+        <input type="text" id="catName" placeholder="name" required>
+        <input type="text" id="catDesc" placeholder="description">
+        <button type="submit" class="btn btn-primary">Create category</button>
+      </form>
+    </div>
+    <div class="card">
+      <div id="categoriesOut" class="data-table"></div>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="panel" id="panel-settings">
+    <div class="panel-head">
+      <h1>Admin session</h1>
+      <p class="panel-sub">Admin endpoints require a real admin user's UUID via the <code>X-User-Id</code> header. Set it once here — it's stored in your browser only.</p>
+    </div>
+    <div class="card settings-card">
+      <label for="adminIdInput">Admin user ID</label>
+      <input type="text" id="adminIdInput" placeholder="e.g. 47188d3f-c7d8-41f7-8116-7f97ed0245f3">
+      <p class="hint">Don't have one? Create it once from the host machine:</p>
+      <pre class="code-block">docker exec -it ekie-postgres psql -U ekie -d ekie -c "INSERT INTO users (id, email, name, role) VALUES (gen_random_uuid(), 'admin@ezitech.test', 'Admin', 'admin') RETURNING id;"</pre>
+      <button class="btn btn-primary" id="saveAdminId">Save</button>
+      <div id="settingsSaved" class="inline-result"></div>
+    </div>
+    <div class="card settings-card">
+      <label for="apiBaseInput">API base URL</label>
+      <input type="text" id="apiBaseInput" placeholder="/api/v1">
+      <p class="hint">Leave as <code>/api/v1</code> when this page is served by the API itself (the default). Only change this if you're hosting the frontend separately from the backend.</p>
+      <button class="btn btn-ghost" id="saveApiBase">Save</button>
+    </div>
+  </section>
+
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script src="/api.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

@@ -62,6 +62,7 @@ partition_pdf(filename='/tmp/warmup.pdf', strategy='hi_res'); \
 print('YOLOX layout model cached at build time')"
 
 COPY app ./app
+COPY frontend ./frontend
 COPY tests ./tests
 COPY scripts ./scripts
 COPY seed_data ./seed_data

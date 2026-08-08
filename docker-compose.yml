@@ -10,6 +10,7 @@ services:
       - .env
     volumes:
       - ./app:/app/app
+      - ./frontend:/app/frontend
     depends_on:
       postgres:
         condition: service_healthy

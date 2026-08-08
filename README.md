@@ -31,10 +31,12 @@ cp .env.example .env          # fill in GOOGLE_API_KEY (free at https://aistudio
 docker compose up --build
 ```
 
-- API: http://localhost:18000/docs (Swagger UI, auto-generated)
+- Frontend: http://localhost:8000/ (single-page admin/search/ask UI, served
+  by the API itself — see "Frontend" below)
+- API: http://localhost:8000/docs (Swagger UI, auto-generated)
 - Neo4j browser: http://localhost:17474
-- MLflow UI: http://localhost:15000
-- Prometheus: http://localhost:19090
+- MLflow UI: http://localhost:5000
+- Prometheus: http://localhost:9090
 - `GET /health` returns `{"status": "ok", "version": ...}` — check this
   first if the API's behavior doesn't match what you expect from the
   source (e.g. a field missing from `/docs`/`/openapi.json`): a version
@@ -42,16 +44,41 @@ docker compose up --build
   (`docker compose up --build`, or `docker compose build --no-cache api`
   if compose is caching layers you don't want).
 
-  Host ports above (18000/17474/15000/19090) are non-default — remapped
-  from Postgres/Neo4j/ChromaDB/MLflow/Prometheus/API's usual ports because
-  Windows' Hyper-V dynamic port exclusion range can silently reserve low
-  ports (5432, 7687, 8000, ...) and make `docker compose up` fail with a
-  "port is not available" bind error. Only the host-side mapping changed —
-  containers still talk to each other over the internal Docker network on
-  the original ports (`postgres:5432`, `neo4j:7687`, etc.), so no
-  application code or `DATABASE_URL`/`NEO4J_URI` needed to change. If your
-  environment doesn't hit this Windows issue, feel free to map these back
-  to the conventional ports in `docker-compose.yml`.
+  The port numbers above are this repo's actual `docker-compose.yml`
+  mappings (api 8000, neo4j http 17474/bolt 7687, chromadb 8001, mlflow
+  5000, prometheus 9090) — if you've remapped any of these locally (e.g.
+  to work around Windows' Hyper-V dynamic port exclusion range silently
+  reserving low ports), substitute your own host-side port; the
+  container-to-container ports (`postgres:5432`, `neo4j:7687`, etc.) never
+  need to change either way.
+
+## Frontend
+
+A single-page admin/search/ask UI lives in `frontend/` — plain HTML/CSS/JS,
+no build step, no Node toolchain. `app/main.py` mounts it as static files
+at `/` (after every API route, so it can never shadow `/api/v1/*`,
+`/health`, or `/metrics`), so `docker compose up` serves both the API and
+the UI from the same container/port with zero new infrastructure.
+
+Covers: Ask (RAG with citations + feedback), Search (all 5 modes side by
+side), Knowledge Graph (technology map, skill dependencies, relationship
+explain, learning recommendations), and the full admin surface — document
+upload/approve/version-linking/quality-scoring, AI-answer review queue,
+usage analytics, quality/gap/duplicate/outdated detection, and categories.
+
+Admin endpoints require a real admin user's UUID via `X-User-Id` — set
+one from the ⚙ Admin tab (paste the UUID from the `INSERT INTO users`
+command shown there, or run it yourself first):
+
+```bash
+docker exec -it ekie-postgres psql -U ekie -d ekie -c \
+  "INSERT INTO users (id, email, name, role) VALUES (gen_random_uuid(), 'admin@ezitech.test', 'Admin', 'admin') RETURNING id;"
+```
+
+The UUID is stored in the browser's `localStorage` only — nothing server-side
+tracks a session; anyone with the UUID can call admin endpoints with it,
+which is fine for a local case-study demo but would need real auth before
+this touched a shared/production environment.
 
 ## Document lifecycle
 
@@ -791,3 +818,8 @@ docstring on `run_evaluation()`.
    across two separate uploads currently creates two graph nodes) —
    deliberately deferred; needs fuzzy/LLM-based matching with real
    false-positive risk, not a quick fix.
+6. The frontend's admin auth is a bare UUID header (`X-User-Id`) pasted into
+   local storage — matches the backend's own `require_admin` design (see
+   `app/core/deps.py`), fine for a local case-study demo, not something to
+   carry into a shared or production environment without real session-based
+   auth on both sides.

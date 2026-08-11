@@ -22,7 +22,7 @@ const API = (() => {
   }
 
   async function request(path, { method = "GET", params, body, isForm = false, admin = false } = {}) {
-    const url = `${base()}${path}${qs(params)}`;
+    const url = `${base()}${admin ? "/admin" : ""}${path}${qs(params)}`;
     const headers = {};
     if (admin) headers["X-User-Id"] = adminId();
     let payload = body;

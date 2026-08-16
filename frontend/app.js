@@ -534,8 +534,8 @@ document.getElementById("loadDuplicates").addEventListener("click", async () => 
 document.getElementById("loadOutdated").addEventListener("click", async () => {
   if (!requireAdmin()) return;
   const out = document.getElementById("outdatedOut");
-  const days = parseInt(document.getElementById("staleDays").value, 10) || 180;
-  const crossCheck = document.getElementById("llmCrossCheck").checked;
+  const staleRaw = document.getElementById("staleDays").value;
+  const days = staleRaw === "" ? 180 : parseInt(staleRaw, 10);  const crossCheck = document.getElementById("llmCrossCheck").checked;
   const rows = await guard(API.adminQualityOutdated(days, crossCheck), { loadingEl: out });
   if (!rows.length) { out.innerHTML = `<div class="empty-state">Nothing flagged as outdated.</div>`; return; }
   out.innerHTML = rows.map((r) => `
@@ -562,8 +562,8 @@ document.getElementById("loadGaps").addEventListener("click", async () => {
 document.getElementById("loadMissing").addEventListener("click", async () => {
   if (!requireAdmin()) return;
   const out = document.getElementById("missingOut");
-  const minMentions = parseInt(document.getElementById("minMentions").value, 10) || 3;
-  const rows = await guard(API.adminMissingKnowledge(minMentions), { loadingEl: out });
+  const minMentionsRaw = document.getElementById("minMentions").value;
+  const minMentions = minMentionsRaw === "" ? 3 : parseInt(minMentionsRaw, 10);  const rows = await guard(API.adminMissingKnowledge(minMentions), { loadingEl: out });
   if (!rows.length) { out.innerHTML = `<div class="empty-state">No missing-knowledge alerts at this threshold.</div>`; return; }
   out.innerHTML = `
     <table>
@@ -602,8 +602,8 @@ async function loadAnalyticsSummary() {
 document.getElementById("loadTimeseries").addEventListener("click", async () => {
   if (!requireAdmin()) return;
   const out = document.getElementById("timeseriesChart");
-  const days = parseInt(document.getElementById("daysInput").value, 10) || 14;
-  const points = await guard(API.adminUsageTimeseries(days), { loadingEl: out });
+  const daysRaw = document.getElementById("daysInput").value;
+  const days = daysRaw === "" ? 14 : parseInt(daysRaw, 10);  const points = await guard(API.adminUsageTimeseries(days), { loadingEl: out });
   if (!points.length) { out.innerHTML = `<div class="empty-state">No queries in this range.</div>`; return; }
   const max = Math.max(...points.map((p) => p.query_count), 1);
   out.innerHTML = points.map((p) => `

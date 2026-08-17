@@ -797,12 +797,23 @@ docstring on `run_evaluation()`.
 
 ## Next steps
 
-1. Ingest a real corpus with titles matching `app/evaluation/eval_set.json`
-   (see "Evaluation query set" above), then hit `POST /api/v1/evaluation/run`
-   to actually measure RAG/retrieval/citation accuracy — `/ask`,
-   `citation_check.py`, and the precision/recall/MRR harness are implemented
-   and unit-tested, but accuracy itself is still unmeasured against a real
-   query set.
+1. **Retrieval accuracy has now been measured** against the real 40-entry
+   eval set (`POST /api/v1/evaluation/run`, Week 4 Monday) — before/after
+   reseeding the corpus:
+
+   | Metric | Before seeding | After seeding |
+   |---|---|---|
+   | precision@10 | 0.087 | 0.097 |
+   | recall@10 | 0.795 | 0.897 |
+   | MRR | 0.581 | 0.608 |
+   | queries scored | — | 39 (1 correctly skipped — no matching title ingested) |
+
+   precision@10 being low (0.097) alongside recall@10 being high (0.897) is
+   an expected shape here, not a red flag: most queries only have a
+   couple of truly-relevant chunks, but retrieval always returns 10 slots,
+   so precision is structurally capped well under 1.0 even when recall is
+   near-complete. Citation accuracy against this same query set is still
+   outstanding — that's Week 4's dedicated evaluation-report work.
 2. Run `GraphStore.upsert_cooccurrence()` live against a real docker-compose
    Neo4j instance — the accumulate-across-documents Cypher has only been
    reasoned through and mock-tested so far (see "Technology maps & skill

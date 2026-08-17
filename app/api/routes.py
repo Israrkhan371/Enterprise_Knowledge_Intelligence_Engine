@@ -66,8 +66,8 @@ class SummaryResponse(BaseModel):
 
 
 @router.get("/search/semantic")
-def search_semantic(q: str, top_k: int = 10, category_filter: str | None = None):
-    return semantic_search(q, top_k=top_k, category_filter=category_filter)
+def search_semantic(q: str, top_k: int = 10, category_filter: str | None = None, db: Session = Depends(get_db)):
+    return semantic_search(q, top_k=top_k, category_filter=category_filter, db=db)
 
 
 @router.get("/search/keyword")

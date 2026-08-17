@@ -654,7 +654,7 @@ def suggest_document_updates(db: Session, document_id: str, staleness_days: int 
         # hit when suggest_document_updates() is actually called.
         from app.search.semantic import semantic_search
 
-        hits = semantic_search(seed_text[:4000], top_k=top_k * 4)
+        hits = semantic_search(seed_text[:4000], top_k=top_k * 4, db=db)
         seen_ids = {document_id}
         for hit in hits:
             other_id = hit.get("document_id")

@@ -51,7 +51,7 @@ def hybrid_search(
     requested_pool_size = rerank_pool_size or settings.rerank_pool_size
     pool_size = min(max(top_k, requested_pool_size), settings.rerank_pool_size_max) if use_reranker else top_k
 
-    semantic_hits = semantic_search(query, top_k=pool_size, category_filter=category_filter)
+    semantic_hits = semantic_search(query, top_k=pool_size, category_filter=category_filter, db=db)
     keyword_hits = keyword_search(db, query, top_k=pool_size)
 
     # Normalize onto a shared fusion key before running RRF. Without this,

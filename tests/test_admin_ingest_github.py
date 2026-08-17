@@ -49,13 +49,31 @@ def test_ingest_github_passes_args_through_to_pipeline():
 
 
 def test_ingest_github_defaults_category_and_token_to_none():
+    # category_id/github_token are declared as Form(None) on the route,
+    # which FastAPI only resolves to a real None through the actual
+    # HTTP/ASGI dependency-injection layer. Calling ingest_github()
+    # directly (as every test in this file does) bypasses that layer
+    # entirely, so omitting the arguments here would leave category_id
+    # bound to the literal Form(None) sentinel object, not None -
+    # `sentinel is None` is False, so the test would fail for a reason
+    # that has nothing to do with this route's own logic. Passing
+    # explicit None values instead tests what this test actually cares
+    # about: that ingest_github() forwards None straight through to
+    # ingest_github_repo() unchanged, not FastAPI's own (already
+    # framework-tested) Form-default resolution.
     db = MagicMock()
     admin = MagicMock(email="mentor@ezitech.com")
 
     with patch("app.admin.routes.ingest_github_repo") as mock_ingest:
         mock_ingest.return_value = []
 
-        ingest_github(repo_url="https://github.com/ezitech/ekie", admin=admin, db=db)
+        ingest_github(
+            repo_url="https://github.com/ezitech/ekie",
+            category_id=None,
+            github_token=None,
+            admin=admin,
+            db=db,
+        )
 
         _, kwargs = mock_ingest.call_args
         assert kwargs["category_id"] is None

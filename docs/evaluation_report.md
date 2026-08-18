@@ -3,12 +3,12 @@
 **Case study:** AI-007 — Enterprise Knowledge Intelligence Engine
 **Maps to:** Evaluation Report (Week 4, Mon, Track B)
 **Status of this document:** Retrieval accuracy section is final, from a
-completed live run (Week 4 Mon, Track A). Citation accuracy section's
-methodology and script are complete and tested; the results table is a
-placeholder — see [Running the citation accuracy check](#running-the-citation-accuracy-check)
-below. This file should be re-saved with that table filled in once the
-script has been run against the live stack, before Thursday's "finalize
-evaluation report writeup" task.
+completed live run (Week 4 Mon, Track A). Citation accuracy section has a
+first real partial result (n=8 of 40, Aug 18) — not a placeholder
+anymore, but not complete either. The 12 queries that failed with `503`
+in that run should be retried, and the remaining ~20 queries in the eval
+set still need to run, before this section's numbers and conclusions are
+treated as final for Thursday's writeup.
 
 ## 1. Scope
 
@@ -139,26 +139,43 @@ MLflow under a new `ekie-citation-eval` experiment (kept separate from
 
 ### Results
 
-*Pending a live run — this table is not yet filled in. Three attempts on
-Aug 18 (a full 40-query run, then `--offset 15 --limit 15`, then
-`--offset 30`) all scored 0 queries — every call failed immediately with
-`RESOURCE_EXHAUSTED`, confirming the account's daily Gemini quota
-(20 requests/day/model) was fully used before this script's first call
-that day, not by a bug in the harness. Splitting into smaller batches
-doesn't help once the day's quota is already at zero; see § 3's "Running
-the citation accuracy check" for options (wait for the daily reset,
-enable billing, or spread `--offset`/`--limit` batches across separate
-days with no other Gemini calls in between). Run successfully and paste
-the combined summary here to finalize this section.*
+*A first partial live result landed Aug 18 — 8 of 20 queries scored (the
+other 12 in that batch failed with `503 UNAVAILABLE`, Gemini's servers
+being overloaded, not a quota issue — `num_errored_quota_exhausted: 0`
+confirms that). The remaining ~20-32 queries (the rest of the 40-query
+set, plus retrying the 12 that hit 503s — those are worth a rerun since
+`503` is transient server load, not a hard failure) should be run before
+this table and the report's conclusions are treated as final. The numbers
+below are real, not placeholders, but n=8 is a small sample — treat the
+25% accuracy rate as an early, concerning signal worth investigating now
+rather than a settled result.*
 
 | Metric | Value |
 |---|---:|
-| Queries scored | — |
-| Answers with ≥1 citation | — |
-| Answers with no citations | — |
-| Citation accuracy rate (of cited answers) | — |
-| Flag: citation number not in sources | — |
-| Flag: claim not supported by cited source | — |
+| Queries attempted / scored | 20 / 8 (12 failed: `503 UNAVAILABLE`, retry pending) |
+| Answers with ≥1 citation | 8 / 8 |
+| Answers with no citations | 0 |
+| Citation accuracy rate (of cited answers) | **0.25** (2 of 8) |
+| Flag: citation number not in sources | 0 |
+| Flag: claim not supported by cited source | 37 (avg. ~4.6 per scored answer) |
+
+**Early read, pending the fuller run:** every single flag is the same
+type — a cited claim's sentence not matching its cited source closely
+enough (similarity < 0.55), not a malformed citation number. Two
+non-exclusive explanations worth checking against
+`docs/citation_accuracy_results_limit20.json`'s per-query detail before
+concluding either way:
+- The model is genuinely citing loosely — pointing at a source that's
+  topically related but doesn't actually say what the sentence claims.
+- The 0.55 similarity threshold itself may be too strict for how Gemini
+  paraphrases source text — a well-supported claim phrased very
+  differently from the source's wording can fail a pure cosine-similarity
+  check even when a human would consider it accurately cited (see § 4's
+  "citation similarity check is a proxy, not entailment").
+
+Distinguishing these needs eyeballing a handful of the 37 flagged
+sentences against their cited source text directly, not just the
+aggregate rate.
 
 ## 4. Known limitations
 
@@ -185,30 +202,44 @@ evaluation:
   partially surfaces (whole answers with zero citations), but a
   partially-cited answer with one unsupported uncited sentence next to
   three well-cited ones isn't caught at the sentence level.
-- **Citation accuracy results in this report reflect one run, not
-  variance across runs.** Gemini generation is non-deterministic; a single
-  run of `check_citation_accuracy.py` is a snapshot, not a confidence
-  interval. Re-running before the Thursday writeup and noting whether the
-  numbers move meaningfully would strengthen this section.
+- **Citation accuracy results in this report reflect one partial run
+  (n=8), not variance across runs.** Gemini generation is
+  non-deterministic; a single run of `check_citation_accuracy.py` is a
+  snapshot, not a confidence interval, and n=8 is too small to treat 0.25
+  as a stable rate rather than a starting signal. Completing the
+  remaining ~32 queries (and re-running on a separate day) before the
+  Thursday writeup would strengthen this section considerably.
 - **The free-tier Gemini quota (20 requests/day/model) limits how much
   live evaluation can happen per day**, on both this check and ordinary
   `/ask` testing sharing the same quota. This is an account/billing
   constraint, not a code defect — see § 3's "Running the citation
   accuracy check" for the `--offset`/`--limit` workaround.
+- **Gemini's own server-side 503 overload errors are a real, separate
+  source of missing data**, distinct from quota exhaustion — 12 of the
+  20 queries in the Aug 18 partial run failed this way. These are worth
+  retrying (transient, not a hard cap like quota), but until retried they
+  leave real gaps in coverage, not just quota-driven ones.
 
 ## 5. Recommendations
 
-- Fill in § 3's results table by running `scripts/check_citation_accuracy.py`
-  against the live stack, then finalize this report for Thursday's
-  writeup task.
-- If `citation_accuracy_rate` comes back low, use
-  `docs/citation_accuracy_results.json`'s per-query breakdown to find the
-  specific flagged sentences (via the admin answer-review queue,
-  `GET /admin/answers?flagged_for_review=true`, or directly in the JSON
-  file) before deciding whether the fix belongs in retrieval (bad chunks
-  reaching generation), the system prompt (citing loosely), or the
-  similarity threshold itself (currently 0.55, chosen without a
-  sensitivity sweep).
+- **Investigate the 0.25 citation accuracy rate now, in parallel with
+  completing the run** — don't wait for full coverage to start looking.
+  Pull a handful of the 37 flagged sentences from
+  `docs/citation_accuracy_results_limit20.json` and read them against
+  their cited source chunk directly: if the cited source clearly doesn't
+  support the claim, that's a real grounding problem in generation. If
+  the source *does* support it but in different words, that points at the
+  0.55 similarity threshold being miscalibrated rather than the model
+  actually citing badly — a different, cheaper fix.
+- Finish scoring the rest of the 40-query set (retry the 12 `503`
+  failures, then cover the untried `--offset 20 --limit 20` range) before
+  treating any conclusion here as final.
+- If the low rate holds up across the fuller run, use
+  `docs/citation_accuracy_results*.json`'s per-query breakdown (via the
+  admin answer-review queue, `GET /admin/answers?flagged_for_review=true`,
+  or directly in the JSON files) to decide whether the fix belongs in
+  retrieval (bad chunks reaching generation), the system prompt (citing
+  loosely), or the similarity threshold itself.
 - Consider tracking an approximate "relevant chunk count" per
   `eval_set.json` entry so precision can be measured at a `k` matched to
   each query, rather than a fixed `k=10` that structurally caps it.

@@ -13,7 +13,7 @@ from app.search.keyword import keyword_search
 from app.search.hybrid import hybrid_search
 from app.search.metadata import metadata_search
 from app.search.context_aware import rewrite_query
-from app.rag.generate import generate_answer
+from app.rag.generate import generate_answer, GeminiQuotaExceededError
 from app.rag.citation_check import verify_citations
 from app.rag.intelligence import compare_documents, compare_documents_full, summarize_document_full, suggest_document_updates
 from app.graph.queries import (
@@ -154,6 +154,12 @@ def ask(payload: AskRequest, db: Session = Depends(get_db)):
     except TimeoutError:
         logger.error("Answer generation timed out for query=%r.", payload.query)
         raise HTTPException(status_code=504, detail="LLM request timed out")
+    except GeminiQuotaExceededError as exc:
+        logger.error("Gemini quota exceeded for query=%r: %s", payload.query, exc)
+        raise HTTPException(
+            status_code=429,
+            detail="LLM provider quota exceeded — try again later or check your Gemini API plan/billing.",
+        )
 
     verification = verify_citations(result["answer"], result["sources"])
 

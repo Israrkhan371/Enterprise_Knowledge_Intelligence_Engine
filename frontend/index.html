@@ -167,6 +167,12 @@
           <button class="btn btn-ghost" id="reloadDocs">Refresh</button>
         </div>
       </div>
+      <div class="inline-controls" id="bulkActionsBar" style="margin: 0.75rem 0;">
+        <label class="checkbox-label"><input type="checkbox" id="selectAllPending"> Select all pending</label>
+        <span id="bulkSelectedCount" class="hint" style="margin: 0;">0 selected</span>
+        <button class="btn btn-sm" id="bulkApproveBtn" disabled>Approve selected</button>
+        <button class="btn btn-sm btn-danger" id="bulkRejectBtn" disabled>Reject selected</button>
+      </div>
       <div id="docsTable" class="data-table"></div>
     </div>
 

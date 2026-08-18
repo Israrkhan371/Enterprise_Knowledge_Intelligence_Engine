@@ -309,19 +309,47 @@ document.getElementById("githubForm").addEventListener("submit", async (e) => {
   loadDocuments();
 });
 
+// IDs the user has checked for bulk approve/reject. Only ever holds IDs of
+// documents that are currently "pending" — approved/rejected docs don't get
+// a checkbox at all, since bulk-deciding them again is meaningless. Cleared
+// on every reload since a fresh render means fresh (unchecked) rows.
+const selectedDocIds = new Set();
+
+function updateBulkBar() {
+  const count = selectedDocIds.size;
+  document.getElementById("bulkSelectedCount").textContent = `${count} selected`;
+  document.getElementById("bulkApproveBtn").disabled = count === 0;
+  document.getElementById("bulkRejectBtn").disabled = count === 0;
+}
+
 async function loadDocuments() {
   if (!requireAdmin()) return;
   const box = document.getElementById("docsTable");
   const status = document.getElementById("docStatusFilter").value;
   const source_type = document.getElementById("docSourceTypeFilter").value.trim();
   const data = await guard(API.adminListDocuments({ status, source_type, limit: 100 }), { loadingEl: box });
-  if (!data.documents.length) { box.innerHTML = `<div class="empty-state">No documents match.</div>`; return; }
+
+  selectedDocIds.clear();
+  const selectAllCb = document.getElementById("selectAllPending");
+  selectAllCb.checked = false;
+
+  if (!data.documents.length) {
+    box.innerHTML = `<div class="empty-state">No documents match.</div>`;
+    selectAllCb.disabled = true;
+    updateBulkBar();
+    return;
+  }
+
+  const anyPending = data.documents.some((d) => d.status === "pending");
+  selectAllCb.disabled = !anyPending;
+
   box.innerHTML = `
     <table>
-      <thead><tr><th>Title</th><th>Source</th><th>Status</th><th>Uploaded by</th><th>Updated</th></tr></thead>
+      <thead><tr><th></th><th>Title</th><th>Source</th><th>Status</th><th>Uploaded by</th><th>Updated</th></tr></thead>
       <tbody>
         ${data.documents.map((d) => `
           <tr class="row-clickable" data-id="${esc(d.id)}">
+            <td class="checkbox-cell">${d.status === "pending" ? `<input type="checkbox" class="doc-select" data-id="${esc(d.id)}">` : ""}</td>
             <td>${esc(d.title)}</td>
             <td><span class="badge">${esc(d.source_type)}</span></td>
             <td><span class="badge ${d.status === "approved" ? "green" : d.status === "rejected" ? "red" : "amber"}">${esc(d.status)}</span></td>
@@ -336,8 +364,66 @@ async function loadDocuments() {
   box.querySelectorAll("tr[data-id]").forEach((row) => {
     row.addEventListener("click", () => openDocumentDetail(row.dataset.id));
   });
+  box.querySelectorAll(".doc-select").forEach((cb) => {
+    // Stop the click reaching the <tr> listener above, or checking a box
+    // would also pop the detail drawer open every time.
+    cb.addEventListener("click", (e) => e.stopPropagation());
+    cb.addEventListener("change", (e) => {
+      const id = e.target.dataset.id;
+      if (e.target.checked) selectedDocIds.add(id); else selectedDocIds.delete(id);
+      const boxes = [...box.querySelectorAll(".doc-select")];
+      selectAllCb.checked = boxes.length > 0 && boxes.every((b) => b.checked);
+      updateBulkBar();
+    });
+  });
+  updateBulkBar();
 }
 document.getElementById("reloadDocs").addEventListener("click", loadDocuments);
+
+document.getElementById("selectAllPending").addEventListener("change", (e) => {
+  const box = document.getElementById("docsTable");
+  box.querySelectorAll(".doc-select").forEach((cb) => {
+    cb.checked = e.target.checked;
+    if (e.target.checked) selectedDocIds.add(cb.dataset.id); else selectedDocIds.delete(cb.dataset.id);
+  });
+  updateBulkBar();
+});
+
+async function bulkDecideDocuments(decision) {
+  if (!requireAdmin()) return;
+  const ids = [...selectedDocIds];
+  if (!ids.length) return;
+
+  const approveBtn = document.getElementById("bulkApproveBtn");
+  const rejectBtn = document.getElementById("bulkRejectBtn");
+  approveBtn.disabled = true;
+  rejectBtn.disabled = true;
+
+  // Sequential, not Promise.all: keeps this from firing dozens of concurrent
+  // writes at once, and lets us report exactly how many of N succeeded if
+  // one fails partway through instead of an all-or-nothing result.
+  let okCount = 0;
+  const failed = [];
+  for (const id of ids) {
+    try {
+      await API.adminApproveDocument(id, decision);
+      okCount++;
+    } catch (err) {
+      failed.push(id);
+    }
+  }
+
+  if (failed.length === 0) {
+    toast(`${okCount} document(s) ${decision}`, "ok");
+  } else {
+    toast(`${okCount} succeeded, ${failed.length} failed — see console`, "err");
+    console.error(`bulk ${decision} failed for document IDs:`, failed);
+  }
+
+  loadDocuments();
+}
+document.getElementById("bulkApproveBtn").addEventListener("click", () => bulkDecideDocuments("approved"));
+document.getElementById("bulkRejectBtn").addEventListener("click", () => bulkDecideDocuments("rejected"));
 
 async function openDocumentDetail(id) {
   const drawer = document.getElementById("docDetail");

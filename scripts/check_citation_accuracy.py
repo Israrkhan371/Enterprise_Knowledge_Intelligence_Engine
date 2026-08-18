@@ -25,11 +25,25 @@ run, e.g.:
 
     docker compose exec api python scripts/check_citation_accuracy.py
     docker compose exec api python scripts/check_citation_accuracy.py --k 6
+    docker compose exec api python scripts/check_citation_accuracy.py --limit 15
+    docker compose exec api python scripts/check_citation_accuracy.py --offset 15 --limit 15
+
+The Gemini free tier caps requests per day per model (20/day at time of
+writing — see the ClientError's quotaId
+GenerateRequestsPerDayPerProjectPerModel-FreeTier if you hit it). All 40
+eval queries in one run will exceed that on its own, before counting any
+other /ask traffic that day. --limit/--offset let you split the 40-query
+set across multiple days (or runs) to stay under quota; each
+offset/limit combination writes its own results file instead of
+overwriting the full run's, so partial runs can be combined by hand
+afterward.
 
 Prints a summary to stdout, writes the full per-query breakdown to
-docs/citation_accuracy_results.json (overwritten each run — this file is
-evidence for the evaluation report, not a growing log), and logs the
-aggregate numbers to MLflow under the "ekie-citation-eval" experiment
+docs/citation_accuracy_results.json for a full run (or
+docs/citation_accuracy_results_offset{N}_limit{M}.json for a sliced run —
+overwritten if that same slice is re-run, since the file is evidence for
+the evaluation report, not a growing log), and logs the aggregate numbers
+to MLflow under the "ekie-citation-eval" experiment
 (kept separate from eval.py's "ekie-retrieval-eval" experiment — retrieval
 and citation accuracy are different things being measured and shouldn't be
 mixed into the same run's metric set).
@@ -37,8 +51,18 @@ mixed into the same run's metric set).
 import argparse
 import json
 import logging
+import sys
 from collections import Counter
 from pathlib import Path
+
+# Run directly as `python scripts/check_citation_accuracy.py` (as opposed
+# to `python -m app.evaluation.eval`, which is how eval.py's equivalent is
+# documented to run), Python only puts this file's own directory
+# (.../scripts) on sys.path — not the repo root where the `app` package
+# lives — so `import app...` below would fail with ModuleNotFoundError.
+# Insert the repo root explicitly so this script works with either
+# invocation style.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import mlflow
 
@@ -64,10 +88,22 @@ def _flag_category(issue: str) -> str:
     return "other"
 
 
-def run(k: int = 6) -> dict:
-    eval_set = load_eval_set()
-    if not eval_set:
+def _results_path(offset: int, limit) -> Path:
+    if offset == 0 and limit is None:
+        return RESULTS_PATH
+    suffix = f"_offset{offset}" if offset else ""
+    suffix += f"_limit{limit}" if limit is not None else ""
+    return RESULTS_PATH.parent / f"citation_accuracy_results{suffix}.json"
+
+
+def run(k: int = 6, offset: int = 0, limit: int | None = None) -> dict:
+    full_eval_set = load_eval_set()
+    if not full_eval_set:
         return {"error": "no eval set found — add app/evaluation/eval_set.json"}
+
+    eval_set = full_eval_set[offset:offset + limit] if limit is not None else full_eval_set[offset:]
+    if not eval_set:
+        return {"error": f"offset {offset} is past the end of the {len(full_eval_set)}-query eval set"}
 
     db = SessionLocal()
     per_query = []
@@ -98,6 +134,14 @@ def run(k: int = 6) -> dict:
 
     scored = [q for q in per_query if "error" not in q]
     errored = [q for q in per_query if "error" in q]
+    # Gemini's free tier is a *daily* per-model request cap, not a
+    # per-minute one — the ClientError's message includes a short
+    # "retry in Ns" hint that doesn't apply to a daily cap, so surfacing
+    # this count separately from other errors (timeouts, malformed
+    # responses) matters: a run full of RESOURCE_EXHAUSTED entries means
+    # "come back after the daily quota resets, or use --offset/--limit to
+    # run a smaller slice," not "something in the pipeline is broken."
+    quota_exhausted = [q for q in errored if "RESOURCE_EXHAUSTED" in q.get("error", "")]
 
     uncited = [q for q in scored if q["num_citations_in_answer"] == 0]
     cited = [q for q in scored if q["num_citations_in_answer"] > 0]
@@ -107,9 +151,12 @@ def run(k: int = 6) -> dict:
     flag_breakdown = Counter(_flag_category(f["issue"]) for f in all_flags)
 
     summary = {
-        "num_queries": len(eval_set),
+        "num_queries_in_full_eval_set": len(full_eval_set),
+        "num_queries_this_run": len(eval_set),
+        "offset": offset,
         "num_scored": len(scored),
         "num_errored": len(errored),
+        "num_errored_quota_exhausted": len(quota_exhausted),
         "num_answers_with_no_citations": len(uncited),
         "num_answers_with_citations": len(cited),
         # The metric that actually matters: of the answers that cited
@@ -124,8 +171,10 @@ def run(k: int = 6) -> dict:
         "k": k,
     }
 
-    RESULTS_PATH.parent.mkdir(exist_ok=True)
-    RESULTS_PATH.write_text(json.dumps({"summary": summary, "per_query": per_query}, indent=2))
+    results_path = _results_path(offset, limit)
+    results_path.parent.mkdir(exist_ok=True)
+    results_path.write_text(json.dumps({"summary": summary, "per_query": per_query}, indent=2))
+    summary["_results_path"] = str(results_path)
 
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
     mlflow.set_experiment("ekie-citation-eval")
@@ -140,11 +189,13 @@ def run(k: int = 6) -> dict:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--k", type=int, default=6, help="top_k passed to generate_answer (default: 6, matches /ask's default)")
+    parser.add_argument("--offset", type=int, default=0, help="skip this many queries from the start of eval_set.json (default: 0)")
+    parser.add_argument("--limit", type=int, default=None, help="run at most this many queries, starting at --offset (default: all remaining)")
     args = parser.parse_args()
 
-    summary = run(k=args.k)
+    summary = run(k=args.k, offset=args.offset, limit=args.limit)
     print(json.dumps(summary, indent=2))
     if "error" not in summary:
-        print(f"\nFull per-query breakdown written to {RESULTS_PATH}")
+        print(f"\nFull per-query breakdown written to {summary['_results_path']}")

@@ -111,6 +111,27 @@ ChromaDB, Neo4j, a working `GOOGLE_API_KEY`):
 docker compose exec api python scripts/check_citation_accuracy.py
 ```
 
+**Gemini free-tier quota constraint:** the Gemini API free tier caps
+requests at 20/day per model
+(`GenerateRequestsPerDayPerProjectPerModel-FreeTier`). All 40 eval queries
+in one run exceed that on their own, before counting any other `/ask`
+traffic that day — a full run on a free-tier key will fail most or all
+queries with `429 RESOURCE_EXHAUSTED`. Use `--offset`/`--limit` to split
+the set across multiple days:
+
+```bash
+docker compose exec api python scripts/check_citation_accuracy.py --limit 15
+docker compose exec api python scripts/check_citation_accuracy.py --offset 15 --limit 15
+docker compose exec api python scripts/check_citation_accuracy.py --offset 30
+```
+
+Each `--offset`/`--limit` combination writes its own results file
+(`docs/citation_accuracy_results_offset{N}_limit{M}.json`) rather than
+overwriting the full run's file, so partial runs can be combined by hand.
+The summary also reports `num_errored_quota_exhausted` separately from
+other errors — if that number is high, the fix is waiting for the daily
+reset or requesting quota, not debugging the pipeline.
+
 This prints a summary to stdout, writes the full per-query breakdown to
 `docs/citation_accuracy_results.json`, and logs the aggregate metrics to
 MLflow under a new `ekie-citation-eval` experiment (kept separate from
@@ -118,9 +139,12 @@ MLflow under a new `ekie-citation-eval` experiment (kept separate from
 
 ### Results
 
-*Pending a live run — this table is not yet filled in. Run the command
-above against the live stack and paste the printed summary here (or share
-`docs/citation_accuracy_results.json`) to finalize this section.*
+*Pending a live run — this table is not yet filled in. A first attempt
+(Aug 18) ran all 40 queries in one go and hit the free-tier daily quota on
+the very first request (`0 / 40` scored) — the account's daily Gemini
+quota was already used up by earlier testing that day. Run in batches
+under `--limit` (see above), ideally as the first Gemini-calling work of
+the day, and paste the combined summary here to finalize this section.*
 
 | Metric | Value |
 |---|---:|
@@ -161,6 +185,11 @@ evaluation:
   run of `check_citation_accuracy.py` is a snapshot, not a confidence
   interval. Re-running before the Thursday writeup and noting whether the
   numbers move meaningfully would strengthen this section.
+- **The free-tier Gemini quota (20 requests/day/model) limits how much
+  live evaluation can happen per day**, on both this check and ordinary
+  `/ask` testing sharing the same quota. This is an account/billing
+  constraint, not a code defect — see § 3's "Running the citation
+  accuracy check" for the `--offset`/`--limit` workaround.
 
 ## 5. Recommendations
 

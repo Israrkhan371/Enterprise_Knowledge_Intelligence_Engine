@@ -46,7 +46,8 @@ def test_run_computes_accuracy_only_over_cited_answers(
 
     summary = run(k=6)
 
-    assert summary["num_queries"] == 3
+    assert summary["num_queries_in_full_eval_set"] == 3
+    assert summary["num_queries_this_run"] == 3
     assert summary["num_scored"] == 3
     assert summary["num_answers_with_no_citations"] == 1
     assert summary["num_answers_with_citations"] == 2
@@ -98,9 +99,58 @@ def test_run_writes_full_breakdown_to_results_file(
     run(k=6)
 
     written = json.loads(results_path.read_text())
-    assert written["summary"]["num_queries"] == 1
+    assert written["summary"]["num_queries_this_run"] == 1
     assert written["per_query"][0]["query"] == "q1"
     assert written["per_query"][0]["verified"] is True
+
+
+@patch("scripts.check_citation_accuracy.mlflow")
+@patch("scripts.check_citation_accuracy.verify_citations")
+@patch("scripts.check_citation_accuracy.generate_answer")
+@patch("scripts.check_citation_accuracy.load_eval_set")
+@patch("scripts.check_citation_accuracy.SessionLocal")
+def test_run_offset_and_limit_slice_the_eval_set(
+    mock_session_local, mock_load_eval_set, mock_generate_answer, mock_verify_citations, mock_mlflow, tmp_path, monkeypatch
+):
+    monkeypatch.setattr("scripts.check_citation_accuracy.RESULTS_PATH", tmp_path / "citation_accuracy_results.json")
+
+    mock_load_eval_set.return_value = [{"query": f"q{i}"} for i in range(5)]
+    mock_session_local.return_value = MagicMock()
+    mock_generate_answer.return_value = {"answer": "Fact. [1]", "sources": [{"index": 1, "text": "..."}]}
+    mock_verify_citations.return_value = {"cited_sources": [1], "flags": [], "verified": True}
+
+    summary = run(k=6, offset=2, limit=2)
+
+    assert summary["num_queries_in_full_eval_set"] == 5
+    assert summary["num_queries_this_run"] == 2
+    assert summary["offset"] == 2
+    assert mock_generate_answer.call_count == 2
+    # offset/limit runs get their own results file so they don't clobber a
+    # full run's docs/citation_accuracy_results.json.
+    assert "offset2_limit2" in summary["_results_path"]
+
+
+@patch("scripts.check_citation_accuracy.mlflow")
+@patch("scripts.check_citation_accuracy.verify_citations")
+@patch("scripts.check_citation_accuracy.generate_answer")
+@patch("scripts.check_citation_accuracy.load_eval_set")
+@patch("scripts.check_citation_accuracy.SessionLocal")
+def test_run_counts_quota_exhaustion_separately_from_other_errors(
+    mock_session_local, mock_load_eval_set, mock_generate_answer, mock_verify_citations, mock_mlflow, tmp_path, monkeypatch
+):
+    monkeypatch.setattr("scripts.check_citation_accuracy.RESULTS_PATH", tmp_path / "citation_accuracy_results.json")
+
+    mock_load_eval_set.return_value = [{"query": "quota hit"}, {"query": "other failure"}]
+    mock_session_local.return_value = MagicMock()
+    mock_generate_answer.side_effect = [
+        Exception("429 RESOURCE_EXHAUSTED. quota exceeded"),
+        Exception("500 internal error"),
+    ]
+
+    summary = run(k=6)
+
+    assert summary["num_errored"] == 2
+    assert summary["num_errored_quota_exhausted"] == 1
 
 
 def test_run_returns_error_when_no_eval_set():

@@ -145,37 +145,42 @@ being overloaded, not a quota issue — `num_errored_quota_exhausted: 0`
 confirms that). The remaining ~20-32 queries (the rest of the 40-query
 set, plus retrying the 12 that hit 503s — those are worth a rerun since
 `503` is transient server load, not a hard failure) should be run before
-this table and the report's conclusions are treated as final. The numbers
-below are real, not placeholders, but n=8 is a small sample — treat the
-25% accuracy rate as an early, concerning signal worth investigating now
-rather than a settled result.*
+this table is treated as final coverage. The numbers below are real, and
+the per-query breakdown has now been inspected directly (see analysis
+below the table) — the 0.25 headline rate is misleading on its own and
+should not be read as "3 in 4 citations are wrong."*
 
 | Metric | Value |
 |---|---:|
 | Queries attempted / scored | 20 / 8 (12 failed: `503 UNAVAILABLE`, retry pending) |
 | Answers with ≥1 citation | 8 / 8 |
 | Answers with no citations | 0 |
-| Citation accuracy rate (of cited answers) | **0.25** (2 of 8) |
+| Citation accuracy rate (of cited answers) | **0.25** (2 of 8) — see analysis below |
 | Flag: citation number not in sources | 0 |
 | Flag: claim not supported by cited source | 37 (avg. ~4.6 per scored answer) |
 
-**Early read, pending the fuller run:** every single flag is the same
-type — a cited claim's sentence not matching its cited source closely
-enough (similarity < 0.55), not a malformed citation number. Two
-non-exclusive explanations worth checking against
-`docs/citation_accuracy_results_limit20.json`'s per-query detail before
-concluding either way:
-- The model is genuinely citing loosely — pointing at a source that's
-  topically related but doesn't actually say what the sentence claims.
-- The 0.55 similarity threshold itself may be too strict for how Gemini
-  paraphrases source text — a well-supported claim phrased very
-  differently from the source's wording can fail a pure cosine-similarity
-  check even when a human would consider it accurately cited (see § 4's
-  "citation similarity check is a proxy, not entailment").
+**Analysis (per-query breakdown inspected directly, Aug 18):** the 37
+flags are not evenly spread — **26 of 37 (70%) come from a single query**,
+*"How do I set up the internship onboarding checklist?"* Its answer is a
+long bulleted checklist where the model tags **every bullet, regardless
+of length, with both source citations** (`[1], [2]` repeated on each
+line). Each short one-line bullet then gets checked against the *entire*
+source chunk (which covers the whole multi-item checklist) — a one-line
+item can't fully match a large multi-topic chunk, so its similarity
+structurally lands just under the threshold. Sample scores from that
+query: 0.46, 0.46, 0.47, 0.47.
 
-Distinguishing these needs eyeballing a handful of the 37 flagged
-sentences against their cited source text directly, not just the
-aggregate rate.
+This pattern holds across **all** 37 flags, not just that query: none
+scored below 0.2 (where a citation would look genuinely unrelated to its
+source) and 29 of 37 sit in the 0.40–0.54 band, clustered just under the
+0.55 cutoff. Zero flags in the "clearly wrong" range is a meaningfully
+different finding than the 25% headline rate suggests — this reads as
+**the 0.55 threshold being too strict for list-formatted, multi-citation
+answers**, not the model citing unsupported claims. Excluding that one
+outlier query, the remaining 6 scored-with-citations queries had 0–4
+flags each (11 flags total), a real but much smaller residual pattern
+worth checking once more data comes in, rather than the alarming
+headline number in isolation.
 
 ## 4. Known limitations
 
@@ -222,24 +227,35 @@ evaluation:
 
 ## 5. Recommendations
 
-- **Investigate the 0.25 citation accuracy rate now, in parallel with
-  completing the run** — don't wait for full coverage to start looking.
-  Pull a handful of the 37 flagged sentences from
-  `docs/citation_accuracy_results_limit20.json` and read them against
-  their cited source chunk directly: if the cited source clearly doesn't
-  support the claim, that's a real grounding problem in generation. If
-  the source *does* support it but in different words, that points at the
-  0.55 similarity threshold being miscalibrated rather than the model
-  actually citing badly — a different, cheaper fix.
+- **The 0.25 rate has been investigated (Aug 18) — it's a threshold/
+  formatting artifact, not a grounding problem, based on current
+  evidence.** 26 of 37 flags come from one checklist-formatted answer
+  where every bullet is tagged with all cited sources regardless of
+  length; across all 37 flags, none scored below 0.2 (would indicate a
+  genuinely unrelated citation) and 78% cluster in 0.40–0.54, just under
+  the 0.55 cutoff. Confirm this holds once the fuller run completes
+  rather than treating it as settled on n=8.
+- Two concrete follow-ups from that finding, either or both worth doing:
+  - Consider whether `verify_citations()` should check a bulleted list
+    item against just the relevant portion of a multi-item source chunk
+    rather than the whole chunk, since a one-line item can't fully match
+    a large multi-topic source by design.
+  - Re-run a small sensitivity check with the threshold lowered (e.g. to
+    0.45) against the same flagged answers to see how much of the 37
+    would clear — informs whether 0.55 needs adjusting generally or just
+    for list-style answers specifically.
 - Finish scoring the rest of the 40-query set (retry the 12 `503`
   failures, then cover the untried `--offset 20 --limit 20` range) before
-  treating any conclusion here as final.
-- If the low rate holds up across the fuller run, use
-  `docs/citation_accuracy_results*.json`'s per-query breakdown (via the
-  admin answer-review queue, `GET /admin/answers?flagged_for_review=true`,
-  or directly in the JSON files) to decide whether the fix belongs in
-  retrieval (bad chunks reaching generation), the system prompt (citing
-  loosely), or the similarity threshold itself.
+  treating any conclusion here as final — n=8 is still small, and the
+  outlier-driven result here should be confirmed, not assumed, once more
+  data comes in.
+- If a genuinely low-similarity pattern (scores well under 0.2) shows up
+  in the fuller run, use `docs/citation_accuracy_results*.json`'s
+  per-query breakdown (now including `cited_source_text` on each flag —
+  via the admin answer-review queue,
+  `GET /admin/answers?flagged_for_review=true`, or directly in the JSON
+  files) to decide whether the fix belongs in retrieval, the system
+  prompt, or the threshold.
 - Consider tracking an approximate "relevant chunk count" per
   `eval_set.json` entry so precision can be measured at a `k` matched to
   each query, rather than a fixed `k=10` that structurally caps it.

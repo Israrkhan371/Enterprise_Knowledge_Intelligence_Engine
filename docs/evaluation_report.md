@@ -139,12 +139,17 @@ MLflow under a new `ekie-citation-eval` experiment (kept separate from
 
 ### Results
 
-*Pending a live run — this table is not yet filled in. A first attempt
-(Aug 18) ran all 40 queries in one go and hit the free-tier daily quota on
-the very first request (`0 / 40` scored) — the account's daily Gemini
-quota was already used up by earlier testing that day. Run in batches
-under `--limit` (see above), ideally as the first Gemini-calling work of
-the day, and paste the combined summary here to finalize this section.*
+*Pending a live run — this table is not yet filled in. Three attempts on
+Aug 18 (a full 40-query run, then `--offset 15 --limit 15`, then
+`--offset 30`) all scored 0 queries — every call failed immediately with
+`RESOURCE_EXHAUSTED`, confirming the account's daily Gemini quota
+(20 requests/day/model) was fully used before this script's first call
+that day, not by a bug in the harness. Splitting into smaller batches
+doesn't help once the day's quota is already at zero; see § 3's "Running
+the citation accuracy check" for options (wait for the daily reset,
+enable billing, or spread `--offset`/`--limit` batches across separate
+days with no other Gemini calls in between). Run successfully and paste
+the combined summary here to finalize this section.*
 
 | Metric | Value |
 |---|---:|

@@ -707,6 +707,12 @@ ingested document are skipped (and counted in the `skipped` field of the
 `run_evaluation()` result) rather than silently scored as a 0 — see the
 docstring on `run_evaluation()`.
 
+**Citation accuracy** (a separate question from retrieval accuracy — does
+the *generated answer* correctly cite what it retrieved?) is evaluated by
+`scripts/check_citation_accuracy.py` over the same 40-query set. See
+[docs/evaluation_report.md](docs/evaluation_report.md) for methodology,
+current retrieval-accuracy results, and how to run it.
+
 ## Known flaws fixed in this pass
 
 - **`semantic_search()` hits were missing `document_id`.** Both

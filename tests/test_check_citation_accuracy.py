@@ -9,6 +9,7 @@ what's under test here, not the live Gemini/embedding calls underneath it
 tests/test_citation_check.py).
 """
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from scripts.check_citation_accuracy import run
@@ -157,3 +158,44 @@ def test_run_returns_error_when_no_eval_set():
     with patch("scripts.check_citation_accuracy.load_eval_set", return_value=[]):
         result = run()
     assert "error" in result
+
+
+@patch("scripts.check_citation_accuracy.mlflow")
+@patch("scripts.check_citation_accuracy.verify_citations")
+@patch("scripts.check_citation_accuracy.generate_answer")
+@patch("scripts.check_citation_accuracy.load_eval_set")
+@patch("scripts.check_citation_accuracy.SessionLocal")
+def test_run_enriches_flags_with_the_cited_source_text(
+    mock_session_local, mock_load_eval_set, mock_generate_answer, mock_verify_citations, mock_mlflow, tmp_path, monkeypatch
+):
+    # verify_citations() only reports the flagged sentence and a similarity
+    # score, not what the cited source actually said - judging whether a
+    # flag is a real grounding problem or a threshold-calibration issue
+    # requires reading the source text too, so the results file should
+    # carry it rather than send someone back to a live query to look it up.
+    monkeypatch.setattr("scripts.check_citation_accuracy.RESULTS_PATH", tmp_path / "citation_accuracy_results.json")
+
+    mock_load_eval_set.return_value = [{"query": "q1"}]
+    mock_session_local.return_value = MagicMock()
+    mock_generate_answer.return_value = {
+        "answer": "Claim. [2]",
+        "sources": [
+            {"index": 1, "text": "Unrelated source text."},
+            {"index": 2, "text": "The actual cited source's full content, for comparison against the claim."},
+        ],
+    }
+    mock_verify_citations.return_value = {
+        "cited_sources": [2],
+        "flags": [{"sentence": "Claim. [2]", "issue": "low similarity (0.31) to source [2]"}],
+        "verified": False,
+    }
+
+    summary = run(k=6)
+
+    written = json.loads(Path(summary["_results_path"]).read_text())
+    flag = written["per_query"][0]["flags"][0]
+    assert flag["cited_source_index"] == 2
+    assert flag["cited_source_text"] == "The actual cited source's full content, for comparison against the claim."
+    # original fields are preserved, not replaced
+    assert flag["sentence"] == "Claim. [2]"
+    assert flag["issue"] == "low similarity (0.31) to source [2]"

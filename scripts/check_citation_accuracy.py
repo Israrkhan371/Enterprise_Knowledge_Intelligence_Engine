@@ -51,6 +51,7 @@ mixed into the same run's metric set).
 import argparse
 import json
 import logging
+import re
 import sys
 from collections import Counter
 from pathlib import Path
@@ -86,6 +87,28 @@ def _flag_category(issue: str) -> str:
     if "low similarity" in issue:
         return "claim_not_supported_by_cited_source"
     return "other"
+
+
+_CITED_INDEX_RE = re.compile(r"source \[(\d+)\]")
+
+
+def _enrich_flags(flags: list[dict], sources: list[dict]) -> list[dict]:
+    # verify_citations() reports the flagged sentence and a similarity
+    # score, but not what the cited source actually says — so judging
+    # "does the source support this claim" means separately looking the
+    # source back up. Attach it here so the results file is self-contained
+    # for exactly that check, without needing another live /ask call.
+    by_index = {s["index"]: s.get("text", "") for s in sources}
+    enriched = []
+    for flag in flags:
+        match = _CITED_INDEX_RE.search(flag["issue"])
+        cited_index = int(match.group(1)) if match else None
+        enriched.append({
+            **flag,
+            "cited_source_index": cited_index,
+            "cited_source_text": by_index.get(cited_index, "")[:800] if cited_index is not None else "",
+        })
+    return enriched
 
 
 def _results_path(offset: int, limit) -> Path:
@@ -127,7 +150,7 @@ def run(k: int = 6, offset: int = 0, limit: int | None = None) -> dict:
                 "num_sources_offered": len(result["sources"]),
                 "num_citations_in_answer": len(verification["cited_sources"]),
                 "verified": verification["verified"],
-                "flags": verification["flags"],
+                "flags": _enrich_flags(verification["flags"], result["sources"]),
             })
     finally:
         db.close()

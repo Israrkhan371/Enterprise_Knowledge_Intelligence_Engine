@@ -12,6 +12,8 @@ services:
       - ./app:/app/app
       - ./frontend:/app/frontend
       - ./scripts:/app/scripts
+      - ./docs:/app/docs
+      - hf_cache:/root/.cache
     depends_on:
       postgres:
         condition: service_healthy
@@ -101,3 +103,4 @@ volumes:
   neo4j_data:
   chroma_data:
   mlflow_data:
+  hf_cache:

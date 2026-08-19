@@ -3,12 +3,14 @@
 **Case study:** AI-007 — Enterprise Knowledge Intelligence Engine
 **Maps to:** Evaluation Report (Week 4, Mon, Track B)
 **Status of this document:** Retrieval accuracy section is final, from a
-completed live run (Week 4 Mon, Track A). Citation accuracy section has a
-first real partial result (n=8 of 40, Aug 18) — not a placeholder
-anymore, but not complete either. The 12 queries that failed with `503`
-in that run should be retried, and the remaining ~20 queries in the eval
-set still need to run, before this section's numbers and conclusions are
-treated as final for Thursday's writeup.
+completed live run (Week 4 Mon, Track A). Citation accuracy section now
+covers **13 of 40 queries scored** across three runs (Aug 18–19) — real
+progress, but still well short of full coverage. 27 queries have not yet
+succeeded (8 in the 0–19 range, 19 in the 20–39 range), most recently
+blocked by a batch of DNS resolution failures unrelated to quota or code
+(see § 4). Numbers below are real and combined across runs, not
+placeholders, but should still be treated as an early read pending fuller
+coverage.
 
 ## 1. Scope
 
@@ -139,48 +141,57 @@ MLflow under a new `ekie-citation-eval` experiment (kept separate from
 
 ### Results
 
-*A first partial live result landed Aug 18 — 8 of 20 queries scored (the
-other 12 in that batch failed with `503 UNAVAILABLE`, Gemini's servers
-being overloaded, not a quota issue — `num_errored_quota_exhausted: 0`
-confirms that). The remaining ~20-32 queries (the rest of the 40-query
-set, plus retrying the 12 that hit 503s — those are worth a rerun since
-`503` is transient server load, not a hard failure) should be run before
-this table is treated as final coverage. The numbers below are real, and
-the per-query breakdown has now been inspected directly (see analysis
-below the table) — the 0.25 headline rate is misleading on its own and
-should not be read as "3 in 4 citations are wrong."*
+*Three runs now, Aug 18–19, across two disjoint offsets. The 0–19 range
+was run twice (8 scored Aug 18, then 12 scored on a rerun Aug 19 — the
+rerun's file overwrote the first, so 12 is the current count for that
+range, not 8+12). The 20–39 range was attempted once and mostly hit a
+batch of DNS resolution failures (`Name or service not known` — see § 4),
+leaving only 1 of 20 scored there. Combined, unique coverage is now
+**13 of 40 queries (33%)** — real progress, but 27 queries (8 in 0–19,
+19 in 20–39) still haven't succeeded even once.*
 
 | Metric | Value |
 |---|---:|
-| Queries attempted / scored | 20 / 8 (12 failed: `503 UNAVAILABLE`, retry pending) |
-| Answers with ≥1 citation | 8 / 8 |
-| Answers with no citations | 0 |
-| Citation accuracy rate (of cited answers) | **0.25** (2 of 8) — see analysis below |
+| Queries scored (unique, combined) | 13 / 40 |
+| — 0–19 range | 12 / 20 (latest rerun; 8 still unscored) |
+| — 20–39 range | 1 / 20 (mostly blocked by DNS failures; 19 still unscored) |
+| Answers with ≥1 citation | 12 / 13 |
+| Answers with no citations | 1 |
+| Citation accuracy rate (of cited answers) | **0.167** (2 of 12, combined) — see analysis below |
 | Flag: citation number not in sources | 0 |
-| Flag: claim not supported by cited source | 37 (avg. ~4.6 per scored answer) |
+| Flag: claim not supported by cited source | 65 combined (61 from 0–19, 4 from 20–39) |
 
-**Analysis (per-query breakdown inspected directly, Aug 18):** the 37
-flags are not evenly spread — **26 of 37 (70%) come from a single query**,
-*"How do I set up the internship onboarding checklist?"* Its answer is a
-long bulleted checklist where the model tags **every bullet, regardless
-of length, with both source citations** (`[1], [2]` repeated on each
-line). Each short one-line bullet then gets checked against the *entire*
-source chunk (which covers the whole multi-item checklist) — a one-line
-item can't fully match a large multi-topic chunk, so its similarity
-structurally lands just under the threshold. Sample scores from that
-query: 0.46, 0.46, 0.47, 0.47.
+**Analysis:** the original 8-scored batch (37 flags) was inspected at the
+sentence level and traced to a formatting/threshold artifact, not real
+hallucination — see the detailed breakdown below, still accurate for that
+data. The 20–39 range's single scored answer (4 flags) is consistent with
+that same finding: its flagged similarity scores were **0.51, 0.51, 0.55,
+0.55** — all clustered right at the 0.55 cutoff, none in the "clearly
+wrong" range. **The newest 0–19 rerun's 61 flags have not yet been
+inspected at the sentence level** (the full per-query file wasn't
+available for direct analysis this round) — worth checking whether the
+same pattern holds before drawing conclusions from the combined 0.167
+rate, the same way `docs/citation_accuracy_results_limit20.json` was
+checked previously.
 
-This pattern holds across **all** 37 flags, not just that query: none
-scored below 0.2 (where a citation would look genuinely unrelated to its
-source) and 29 of 37 sit in the 0.40–0.54 band, clustered just under the
-0.55 cutoff. Zero flags in the "clearly wrong" range is a meaningfully
-different finding than the 25% headline rate suggests — this reads as
-**the 0.55 threshold being too strict for list-formatted, multi-citation
-answers**, not the model citing unsupported claims. Excluding that one
-outlier query, the remaining 6 scored-with-citations queries had 0–4
-flags each (11 flags total), a real but much smaller residual pattern
-worth checking once more data comes in, rather than the alarming
-headline number in isolation.
+**Original per-query analysis (Aug 18 batch, 8 scored / 37 flags)** — the
+37 flags were not evenly spread: **26 of 37 (70%) come from a single
+query**, *"How do I set up the internship onboarding checklist?"* Its
+answer is a long bulleted checklist where the model tags **every bullet,
+regardless of length, with both source citations** (`[1], [2]` repeated
+on each line). Each short one-line bullet then gets checked against the
+*entire* source chunk (which covers the whole multi-item checklist) — a
+one-line item can't fully match a large multi-topic chunk, so its
+similarity structurally lands just under the threshold. Sample scores
+from that query: 0.46, 0.46, 0.47, 0.47.
+
+This pattern held across all 37 of that batch's flags: none scored below
+0.2 (where a citation would look genuinely unrelated to its source) and
+29 of 37 sat in the 0.40–0.54 band, clustered just under the 0.55 cutoff
+— consistent with the 20–39 range's 4 flags above. This reads as **the
+0.55 threshold being too strict for list-formatted, multi-citation
+answers**, not the model citing unsupported claims, across every batch
+inspected so far.
 
 ## 4. Known limitations
 
@@ -207,55 +218,68 @@ evaluation:
   partially surfaces (whole answers with zero citations), but a
   partially-cited answer with one unsupported uncited sentence next to
   three well-cited ones isn't caught at the sentence level.
-- **Citation accuracy results in this report reflect one partial run
-  (n=8), not variance across runs.** Gemini generation is
-  non-deterministic; a single run of `check_citation_accuracy.py` is a
-  snapshot, not a confidence interval, and n=8 is too small to treat 0.25
-  as a stable rate rather than a starting signal. Completing the
-  remaining ~32 queries (and re-running on a separate day) before the
-  Thursday writeup would strengthen this section considerably.
+- **Citation accuracy results reflect a handful of partial runs
+  (n=13 combined), not variance across many runs.** Gemini generation is
+  non-deterministic; each run of `check_citation_accuracy.py` is a
+  snapshot, not a confidence interval, and n=13 is still too small to
+  treat 0.167 as a stable rate rather than a developing signal.
+  Completing the remaining 27 queries (and re-running on separate days)
+  before the Thursday writeup would strengthen this section considerably.
 - **The free-tier Gemini quota (20 requests/day/model) limits how much
   live evaluation can happen per day**, on both this check and ordinary
   `/ask` testing sharing the same quota. This is an account/billing
   constraint, not a code defect — see § 3's "Running the citation
   accuracy check" for the `--offset`/`--limit` workaround.
 - **Gemini's own server-side 503 overload errors are a real, separate
-  source of missing data**, distinct from quota exhaustion — 12 of the
-  20 queries in the Aug 18 partial run failed this way. These are worth
+  source of missing data**, distinct from quota exhaustion — 12 of 20
+  queries in the first Aug 18 attempt failed this way. These are worth
   retrying (transient, not a hard cap like quota), but until retried they
   leave real gaps in coverage, not just quota-driven ones.
+- **DNS resolution failures blocked most of the Aug 19 20–39-range run**
+  (`Failed to resolve 'generativelanguage.googleapis.com'` — 19 of 20
+  queries in that batch). This is a container/network-level failure, not
+  a quota, code, or Gemini-side issue — the request never left the
+  container. Likely causes: Docker's embedded DNS resolver having a
+  transient hiccup, or network instability around the time of that run
+  (possibly related to switching `GOOGLE_API_KEY`/project and recreating
+  the container beforehand). If it recurs, check
+  `docker compose exec api getent hosts generativelanguage.googleapis.com`
+  before assuming it's a Gemini-side problem, and consider retrying after
+  a plain `docker compose restart api` (no `--force-recreate` needed) to
+  rule out a stuck network namespace.
 
 ## 5. Recommendations
 
-- **The 0.25 rate has been investigated (Aug 18) — it's a threshold/
-  formatting artifact, not a grounding problem, based on current
-  evidence.** 26 of 37 flags come from one checklist-formatted answer
-  where every bullet is tagged with all cited sources regardless of
-  length; across all 37 flags, none scored below 0.2 (would indicate a
-  genuinely unrelated citation) and 78% cluster in 0.40–0.54, just under
-  the 0.55 cutoff. Confirm this holds once the fuller run completes
-  rather than treating it as settled on n=8.
-- Two concrete follow-ups from that finding, either or both worth doing:
+- **The threshold/formatting-artifact finding (originally from the Aug 18
+  n=8 batch) holds up against the 20–39 range's data too** — its 4 flags
+  scored 0.51, 0.51, 0.55, 0.55, the same near-threshold clustering, none
+  in the "clearly wrong" range. Still not confirmed against the newest
+  0–19 rerun's 61 flags, which haven't been inspected at the sentence
+  level yet — do that next, the same way `citation_accuracy_results_limit20.json`
+  was checked before, before treating the combined 0.167 rate as settled.
+- Two concrete follow-ups from the threshold finding, either or both
+  worth doing:
   - Consider whether `verify_citations()` should check a bulleted list
     item against just the relevant portion of a multi-item source chunk
     rather than the whole chunk, since a one-line item can't fully match
     a large multi-topic source by design.
   - Re-run a small sensitivity check with the threshold lowered (e.g. to
-    0.45) against the same flagged answers to see how much of the 37
+    0.45) against the flagged answers collected so far to see how many
     would clear — informs whether 0.55 needs adjusting generally or just
     for list-style answers specifically.
-- Finish scoring the rest of the 40-query set (retry the 12 `503`
-  failures, then cover the untried `--offset 20 --limit 20` range) before
-  treating any conclusion here as final — n=8 is still small, and the
-  outlier-driven result here should be confirmed, not assumed, once more
-  data comes in.
+- **27 queries still need to run at least once**: 8 remaining in the
+  0–19 range (some combination of `503`s and quota hits across the two
+  attempts there), and 19 in the 20–39 range (mostly blocked by the DNS
+  failures in § 4 — worth investigating that before just retrying, since
+  a retry into the same broken network state will likely fail the same
+  way).
 - If a genuinely low-similarity pattern (scores well under 0.2) shows up
-  in the fuller run, use `docs/citation_accuracy_results*.json`'s
-  per-query breakdown (now including `cited_source_text` on each flag —
-  via the admin answer-review queue,
-  `GET /admin/answers?flagged_for_review=true`, or directly in the JSON
-  files) to decide whether the fix belongs in retrieval, the system
-  prompt, or the threshold.
+  once the newest 61-flag batch and the remaining queries are inspected,
+  use `docs/citation_accuracy_results*.json`'s per-query breakdown (now
+  including `cited_source_text` on each flag — via the admin
+  answer-review queue, `GET /admin/answers?flagged_for_review=true`, or
+  directly in the JSON files) to decide whether the fix belongs in
+  retrieval, the system prompt, or the threshold.
 - Consider tracking an approximate "relevant chunk count" per
   `eval_set.json` entry so precision can be measured at a `k` matched to
   each query, rather than a fixed `k=10` that structurally caps it.

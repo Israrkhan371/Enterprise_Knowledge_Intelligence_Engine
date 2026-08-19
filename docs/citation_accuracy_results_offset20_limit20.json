@@ -3,12 +3,12 @@
     "num_queries_in_full_eval_set": 40,
     "num_queries_this_run": 20,
     "offset": 20,
-    "num_scored": 8,
-    "num_errored": 12,
+    "num_scored": 9,
+    "num_errored": 11,
     "num_errored_quota_exhausted": 0,
     "num_answers_with_no_citations": 0,
-    "num_answers_with_citations": 8,
-    "citation_accuracy_rate": 0.25,
+    "num_answers_with_citations": 9,
+    "citation_accuracy_rate": 0.0,
     "flag_breakdown": {
       "claim_not_supported_by_cited_source": 30
     },
@@ -18,30 +18,70 @@
   "per_query": [
     {
       "query": "What columns does the documents table have?",
-      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
-    },
-    {
-      "query": "How are document chunks linked back to their parent document in the database?",
-      "answer": "Based on the provided sources, document chunks are linked back to their parent document in the database via the `document_chunks.document_id` column, which is a foreign key referencing the `id` primary key of the `documents` table (`document_chunks.document_id UUID NOT NULL REFERENCES documents(id)`) [2]. \n\nDuring the ingestion pipeline:\n- The parent document's ID (`document.id`) is assigned when `db.add(document)` and `db.flush()` are executed [4, 5].\n- Each chunk created from the document is then instantiated as a `DocumentChunk` record with `document_id=document.id`, linking the chunk directly to its parent document [4, 5].",
+      "answer": "Based on the codebase models and schema definitions, the `documents` table contains the following columns [1], [3], [5]:\n\n* **`id`**: Primary key (`UUID`) [3], [5]\n* **`title`**: Title of the document (`String` / `VARCHAR`) [3], [5]\n* **`source_type`**: Type of source (e.g., pdf, docx, github, transcript, sop) (`String` / `VARCHAR`) [3], [5]\n* **`source_uri`**: URI or path to the source file (`String` / `VARCHAR`, nullable) [3], [5]\n* **`category_id`**: Foreign key referencing `categories.id` (`UUID`, nullable) [3], [5]\n* **`raw_text`**: Raw text content of the document (`Text`, nullable) [3], [5]\n* **`status`**: Lifecycle status (e.g., pending, approved, rejected, stale) (`String` / `VARCHAR`) [3], [5]\n* **`quality_score`**: Document quality score (`Float`, nullable) [3], [5]\n* **`uploaded_by`**: Identifier of the uploader (`String` / `VARCHAR`, nullable) [3], [5]\n* **`created_at`**: Creation timestamp (`DateTime` / `TIMESTAMP`) [3], [5]\n* **`updated_at`**: Last update timestamp (`DateTime` / `TIMESTAMP`) [3], [5]\n* **`supersedes_id`**: Self-referential foreign key referencing `documents.id` (`UUID`, nullable) for document version intelligence [1], [3]\n* **`version`**: Document version integer (`Integer`, default `1`) [1], [3]",
       "num_sources_offered": 6,
-      "num_citations_in_answer": 1,
+      "num_citations_in_answer": 3,
       "verified": false,
       "flags": [
         {
-          "sentence": "Based on the provided sources, document chunks are linked back to their parent document in the database via the `document_chunks.document_id` column, which is a foreign key referencing the `id` primary key of the `documents` table (`document_chunks.document_id UUID NOT NULL REFERENCES documents(id)`) [2].",
+          "sentence": "Based on the codebase models and schema definitions, the `documents` table contains the following columns [1], [3], [5]:\n\n* **`id`**: Primary key (`UUID`) [3], [5]\n* **`title`**: Title of the document (`String` / `VARCHAR`) [3], [5]\n* **`source_type`**: Type of source (e.g., pdf, docx, github, transcript, sop) (`String` / `VARCHAR`) [3], [5]\n* **`source_uri`**: URI or path to the source file (`String` / `VARCHAR`, nullable) [3], [5]\n* **`category_id`**: Foreign key referencing `categories.id` (`UUID`, nullable) [3], [5]\n* **`raw_text`**: Raw text content of the document (`Text`, nullable) [3], [5]\n* **`status`**: Lifecycle status (e.g., pending, approved, rejected, stale) (`String` / `VARCHAR`) [3], [5]\n* **`quality_score`**: Document quality score (`Float`, nullable) [3], [5]\n* **`uploaded_by`**: Identifier of the uploader (`String` / `VARCHAR`, nullable) [3], [5]\n* **`created_at`**: Creation timestamp (`DateTime` / `TIMESTAMP`) [3], [5]\n* **`updated_at`**: Last update timestamp (`DateTime` / `TIMESTAMP`) [3], [5]\n* **`supersedes_id`**: Self-referential foreign key referencing `documents.id` (`UUID`, nullable) for document version intelligence [1], [3]\n* **`version`**: Document version integer (`Integer`, default `1`) [1], [3]",
+          "issue": "low similarity (0.47) to source [1]",
+          "cited_source_index": 1,
+          "cited_source_text": "\"\"\"add document version intelligence columns Adds documents.supersedes_id and documents.version, backing the Document Version Intelligence feature (app/rag/version_intelligence.py). These were added to app/core/models.py's Document model, but nothing previously migrated existing `documents` tables to match \u2014 app/main.py only ran Base.metadata.create_all(), which creates missing TABLES, not missing COLUMNS on tables that already existed. That mismatch is what caused \"psycopg2.errors.UndefinedColumn: column 'supersedes_id' of relation 'documents' does not exist\" in test_keyword_search_integration.py and test_metadata.py. Guarded with an existence check so this is a no-op on a fresh database where create_all() already created the table with both columns (e.g. after `docker compose down -v`), "
+        }
+      ]
+    },
+    {
+      "query": "How are document chunks linked back to their parent document in the database?",
+      "answer": "In the database, document chunks are linked back to their parent document through a foreign key relationship in PostgreSQL:\n\n* The `document_chunks` table contains a `document_id` column that directly references the parent document's primary key (`document_id UUID NOT NULL REFERENCES documents(id)`) [2].\n* During ingestion, each chunk row (`DocumentChunk`) is created and saved with its `document_id` field set to the assigned ID of the parent `Document` (`document.id`), establishing a many-chunks-to-one-document relationship [2], [4].",
+      "num_sources_offered": 6,
+      "num_citations_in_answer": 2,
+      "verified": false,
+      "flags": [
+        {
+          "sentence": "In the database, document chunks are linked back to their parent document through a foreign key relationship in PostgreSQL:\n\n* The `document_chunks` table contains a `document_id` column that directly references the parent document's primary key (`document_id UUID NOT NULL REFERENCES documents(id)`) [2].",
           "issue": "low similarity (0.38) to source [2]",
           "cited_source_index": 2,
           "cited_source_text": "-- EKIE Database Schema -- PostgreSQL schema for the Enterprise Knowledge Intelligence Engine. -- Source of truth is app/core/models.py; this dump mirrors it exactly. CREATE TABLE categories ( id UUID PRIMARY KEY, name VARCHAR NOT NULL UNIQUE, description TEXT ); COMMENT ON TABLE categories IS 'Admin-managed document categories (e.g. sop, coding_standards).'; CREATE TABLE documents ( id UUID PRIMARY KEY, title VARCHAR NOT NULL, source_type VARCHAR NOT NULL, -- pdf, docx, github, transcript, sop, etc. source_uri VARCHAR, category_id UUID REFERENCES categories(id), raw_text TEXT, status VARCHAR DEFAULT 'pending', -- pending, approved, rejected, stale quality_score FLOAT, uploaded_by VARCHAR, created_at TIMESTAMP, updated_at TIMESTAMP ); COMMENT ON TABLE documents IS 'One row per ingested sou"
+        },
+        {
+          "sentence": "* During ingestion, each chunk row (`DocumentChunk`) is created and saved with its `document_id` field set to the assigned ID of the parent `Document` (`document.id`), establishing a many-chunks-to-one-document relationship [2], [4].",
+          "issue": "low similarity (0.40) to source [2]",
+          "cited_source_index": 2,
+          "cited_source_text": "-- EKIE Database Schema -- PostgreSQL schema for the Enterprise Knowledge Intelligence Engine. -- Source of truth is app/core/models.py; this dump mirrors it exactly. CREATE TABLE categories ( id UUID PRIMARY KEY, name VARCHAR NOT NULL UNIQUE, description TEXT ); COMMENT ON TABLE categories IS 'Admin-managed document categories (e.g. sop, coding_standards).'; CREATE TABLE documents ( id UUID PRIMARY KEY, title VARCHAR NOT NULL, source_type VARCHAR NOT NULL, -- pdf, docx, github, transcript, sop, etc. source_uri VARCHAR, category_id UUID REFERENCES categories(id), raw_text TEXT, status VARCHAR DEFAULT 'pending', -- pending, approved, rejected, stale quality_score FLOAT, uploaded_by VARCHAR, created_at TIMESTAMP, updated_at TIMESTAMP ); COMMENT ON TABLE documents IS 'One row per ingested sou"
+        },
+        {
+          "sentence": "* During ingestion, each chunk row (`DocumentChunk`) is created and saved with its `document_id` field set to the assigned ID of the parent `Document` (`document.id`), establishing a many-chunks-to-one-document relationship [2], [4].",
+          "issue": "low similarity (0.49) to source [4]",
+          "cited_source_index": 4,
+          "cited_source_text": "import logging from sqlalchemy.orm import Session from app.core.models import Document, DocumentChunk from app.ingestion.loaders import load_by_source_type, load_github_repo, extract_code_comments from app.ingestion.ocr import needs_ocr, ocr_scanned_pdf from app.ingestion.chunking import chunk_text from app.embeddings.embedder import embed_texts from app.embeddings.vector_store import upsert_chunks from app.graph.build import GraphStore from app.graph.extract import extract_cooccurrences, extract_entities from app.graph.relationships import aggregate_cooccurrences logger = logging.getLogger(__name__) def _populate_graph(document: Document, text: str) -> None: \"\"\" Runs entity/relationship extraction over the *full* document text (not the embedding chunks - see hybrid architecture note below"
         }
       ]
     },
     {
       "query": "What node and relationship types exist in the Neo4j knowledge graph?",
-      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+      "error": "LLM request timed out"
     },
     {
       "query": "What topics are covered in the introductory Retrieval-Augmented Generation course?",
-      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+      "answer": "Based on the \"Introduction to Retrieval-Augmented Generation (RAG) Systems\" course module, the following topics are covered [1]:\n\n* **Module 1: Why RAG** \u2013 The structural limitations of large language models (fixed knowledge cutoffs and lack of private organizational document awareness) and how RAG retrieves relevant text to ground answers in current, organization-specific information [1].\n* **Module 2: The RAG pipeline** \u2013 The three stages of a RAG system: (1) document ingestion, chunking, and embedding into a vector store; (2) query embedding and retrieval of similar chunks; and (3) generating answers grounded in the retrieved context using an LLM [1].\n* **Module 3: Why retrieval quality matters more than the LLM** \u2013 Why retrieval failures lead to wrong or hallucinated answers, and why evaluation frameworks separately measure retrieval metrics such as precision, recall, and MRR [1].\n* **Module 4: Citations** \u2013 How production RAG systems should cite backing source documents and verify that citations are actually supported by the source text [1].\n\nThe course also references further reading on combining search methods through dense vs. sparse retrieval and Reciprocal Rank Fusion [1].",
+      "num_sources_offered": 6,
+      "num_citations_in_answer": 1,
+      "verified": false,
+      "flags": [
+        {
+          "sentence": "* **Module 4: Citations** \u2013 How production RAG systems should cite backing source documents and verify that citations are actually supported by the source text [1].",
+          "issue": "low similarity (0.40) to source [1]",
+          "cited_source_index": 1,
+          "cited_source_text": "LMS - Introduction to RAG Systems Introduction to Retrieval-Augmented Generation (RAG) Systems Module 1: Why RAG Large language models have two structural limits: a fixed knowledge cutoff, and no awareness of an organization's private documents. RAG addresses both by retrieving relevant text from a knowledge base at query time and feeding it to the model as context, so answers can be grounded in current, organization-specific information instead of relying only on what the model memorized during training. Module 2: The RAG pipeline A RAG system has three stages: (1) ingest documents, split them into chunks, and embed each chunk into a vector store; (2) at query time, embed the query and retrieve the most similar chunks; (3) pass the retrieved chunks plus the original query to an LLM, which"
+        },
+        {
+          "sentence": "sparse retrieval and Reciprocal Rank Fusion [1].",
+          "issue": "low similarity (0.29) to source [1]",
+          "cited_source_index": 1,
+          "cited_source_text": "LMS - Introduction to RAG Systems Introduction to Retrieval-Augmented Generation (RAG) Systems Module 1: Why RAG Large language models have two structural limits: a fixed knowledge cutoff, and no awareness of an organization's private documents. RAG addresses both by retrieving relevant text from a knowledge base at query time and feeding it to the model as context, so answers can be grounded in current, organization-specific information instead of relying only on what the model memorized during training. Module 2: The RAG pipeline A RAG system has three stages: (1) ingest documents, split them into chunks, and embed each chunk into a vector store; (2) at query time, embed the query and retrieve the most similar chunks; (3) pass the retrieved chunks plus the original query to an LLM, which"
+        }
+      ]
     },
     {
       "query": "Where can I learn about vector databases and embedding models as a new intern?",
@@ -61,111 +101,63 @@
     },
     {
       "query": "What decisions were made in the Week 2 architecture review meeting?",
-      "answer": "Based on the Week 2 Architecture Review meeting notes, the following decisions were made:\n\n1. **Hybrid search ships before RAG generation:** Hybrid search must be completed first because the `/ask` endpoint depends on it for retrieval [1], [2].\n2. **Comprehensive evaluation framework:** The evaluation framework (including query set and precision/recall/MRR metrics) will receive a full pass during Week 2\u2014rather than just a placeholder\u2014so the checkpoint can report real retrieval quality figures [1], [2].\n3. **Scheduling for metadata search and context-aware query rewriting:** These are scheduled for Week 2 Thursday, after the core search stack is stable [1], [2].\n\n### Additional architectural and workload decisions agreed upon in the meeting:\n* **Division of work by layer:** Work was divided by layer rather than feature. Engineer A owns the search stack, while Engineer B owns document intelligence and graph intelligence [1], [2].\n* **Hybrid search scoring method:** Decided to use Reciprocal Rank Fusion instead of a weighted-score blend, as semantic and keyword scores are not on comparable scales [1], [2].\n* **Coupling RAG generation and citation checking:** RAG answer generation and citation checking were scoped together as a single connected piece of work because `citation_check.py` requires the same source list used by `generate.py` [1], [2].",
+      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+    },
+    {
+      "query": "What action items came out of the sprint planning meeting for the knowledge graph feature?",
+      "answer": "Based on the Sprint Planning meeting notes for the Knowledge Graph feature, the action items assigned to Engineer B are:\n\n* Implement `extract_entities`/`extract_relationships`, wire them into `pipeline._populate_graph`, and iterate on entity quality against real uploaded documents across every source type [1], [2].\n* Derive technology maps and skill dependencies from accumulated co-occurrence evidence once extraction is stable [1], [2].",
       "num_sources_offered": 6,
       "num_citations_in_answer": 2,
       "verified": false,
       "flags": [
         {
-          "sentence": "**Hybrid search ships before RAG generation:** Hybrid search must be completed first because the `/ask` endpoint depends on it for retrieval [1], [2].",
-          "issue": "low similarity (0.46) to source [1]",
-          "cited_source_index": 1,
-          "cited_source_text": "# Meeting Notes - Week 2 Architecture Review **Date:** Week 2, Monday **Attendees:** Engineer A, Engineer B, Mentor ## Agenda Review Week 1 checkpoint results and align on Week 2 search/RAG architecture before starting implementation. ## Discussion - Week 1 checkpoint confirmed: documents flow end-to-end through Postgres, ChromaDB, and Neo4j on upload. Graph entity quality needed several rounds of fixing (noisy spaCy labels, missed tech terms) but is now stable. - Agreed to split Week 2 by layer rather than by feature: Engineer A owns the search stack (semantic, keyword, hybrid, metadata, context-aware rewriting), Engineer B owns document intelligence (comparison, duplicate detection, summarization) and graph intelligence (technology maps, skill dependencies). - Decided hybrid search will "
-        },
-        {
-          "sentence": "**Hybrid search ships before RAG generation:** Hybrid search must be completed first because the `/ask` endpoint depends on it for retrieval [1], [2].",
-          "issue": "low similarity (0.46) to source [2]",
-          "cited_source_index": 2,
-          "cited_source_text": "# Meeting Notes - Week 2 Architecture Review **Date:** Week 2, Monday **Attendees:** Engineer A, Engineer B, Mentor ## Agenda Review Week 1 checkpoint results and align on Week 2 search/RAG architecture before starting implementation. ## Discussion - Week 1 checkpoint confirmed: documents flow end-to-end through Postgres, ChromaDB, and Neo4j on upload. Graph entity quality needed several rounds of fixing (noisy spaCy labels, missed tech terms) but is now stable. - Agreed to split Week 2 by layer rather than by feature: Engineer A owns the search stack (semantic, keyword, hybrid, metadata, context-aware rewriting), Engineer B owns document intelligence (comparison, duplicate detection, summarization) and graph intelligence (technology maps, skill dependencies). - Decided hybrid search will "
-        },
-        {
-          "sentence": "**Comprehensive evaluation framework:** The evaluation framework (including query set and precision/recall/MRR metrics) will receive a full pass during Week 2\u2014rather than just a placeholder\u2014so the checkpoint can report real retrieval quality figures [1], [2].",
-          "issue": "low similarity (0.50) to source [1]",
-          "cited_source_index": 1,
-          "cited_source_text": "# Meeting Notes - Week 2 Architecture Review **Date:** Week 2, Monday **Attendees:** Engineer A, Engineer B, Mentor ## Agenda Review Week 1 checkpoint results and align on Week 2 search/RAG architecture before starting implementation. ## Discussion - Week 1 checkpoint confirmed: documents flow end-to-end through Postgres, ChromaDB, and Neo4j on upload. Graph entity quality needed several rounds of fixing (noisy spaCy labels, missed tech terms) but is now stable. - Agreed to split Week 2 by layer rather than by feature: Engineer A owns the search stack (semantic, keyword, hybrid, metadata, context-aware rewriting), Engineer B owns document intelligence (comparison, duplicate detection, summarization) and graph intelligence (technology maps, skill dependencies). - Decided hybrid search will "
-        },
-        {
-          "sentence": "**Comprehensive evaluation framework:** The evaluation framework (including query set and precision/recall/MRR metrics) will receive a full pass during Week 2\u2014rather than just a placeholder\u2014so the checkpoint can report real retrieval quality figures [1], [2].",
-          "issue": "low similarity (0.50) to source [2]",
-          "cited_source_index": 2,
-          "cited_source_text": "# Meeting Notes - Week 2 Architecture Review **Date:** Week 2, Monday **Attendees:** Engineer A, Engineer B, Mentor ## Agenda Review Week 1 checkpoint results and align on Week 2 search/RAG architecture before starting implementation. ## Discussion - Week 1 checkpoint confirmed: documents flow end-to-end through Postgres, ChromaDB, and Neo4j on upload. Graph entity quality needed several rounds of fixing (noisy spaCy labels, missed tech terms) but is now stable. - Agreed to split Week 2 by layer rather than by feature: Engineer A owns the search stack (semantic, keyword, hybrid, metadata, context-aware rewriting), Engineer B owns document intelligence (comparison, duplicate detection, summarization) and graph intelligence (technology maps, skill dependencies). - Decided hybrid search will "
-        },
-        {
-          "sentence": "**Scheduling for metadata search and context-aware query rewriting:** These are scheduled for Week 2 Thursday, after the core search stack is stable [1], [2].",
+          "sentence": "* Derive technology maps and skill dependencies from accumulated co-occurrence evidence once extraction is stable [1], [2].",
           "issue": "low similarity (0.39) to source [1]",
           "cited_source_index": 1,
-          "cited_source_text": "# Meeting Notes - Week 2 Architecture Review **Date:** Week 2, Monday **Attendees:** Engineer A, Engineer B, Mentor ## Agenda Review Week 1 checkpoint results and align on Week 2 search/RAG architecture before starting implementation. ## Discussion - Week 1 checkpoint confirmed: documents flow end-to-end through Postgres, ChromaDB, and Neo4j on upload. Graph entity quality needed several rounds of fixing (noisy spaCy labels, missed tech terms) but is now stable. - Agreed to split Week 2 by layer rather than by feature: Engineer A owns the search stack (semantic, keyword, hybrid, metadata, context-aware rewriting), Engineer B owns document intelligence (comparison, duplicate detection, summarization) and graph intelligence (technology maps, skill dependencies). - Decided hybrid search will "
+          "cited_source_text": "# Meeting Notes - Sprint Planning Knowledge Graph **Date:** Week 1, Wednesday **Attendees:** Engineer B, Mentor ## Agenda Plan the entity extraction and graph population work for the knowledge graph feature before Engineer B starts implementation. ## Discussion - Reviewed spaCy NER as the extraction approach (vs. an LLM-based extractor) \u2014 chosen for speed and cost, since it runs on every ingested document and an LLM call per document would be slow and expensive at scale. - Anticipated that raw spaCy NER output would be noisy (DATE/MONEY/TIME entities, merged multi-word tech terms) and agreed this should be treated as an expected first pass to harden through manual testing against real documents, not a one-shot implementation. - Discussed the Document/Entity/MENTIONS/RELATES_TO graph shape:"
         },
         {
-          "sentence": "**Scheduling for metadata search and context-aware query rewriting:** These are scheduled for Week 2 Thursday, after the core search stack is stable [1], [2].",
+          "sentence": "* Derive technology maps and skill dependencies from accumulated co-occurrence evidence once extraction is stable [1], [2].",
           "issue": "low similarity (0.39) to source [2]",
           "cited_source_index": 2,
-          "cited_source_text": "# Meeting Notes - Week 2 Architecture Review **Date:** Week 2, Monday **Attendees:** Engineer A, Engineer B, Mentor ## Agenda Review Week 1 checkpoint results and align on Week 2 search/RAG architecture before starting implementation. ## Discussion - Week 1 checkpoint confirmed: documents flow end-to-end through Postgres, ChromaDB, and Neo4j on upload. Graph entity quality needed several rounds of fixing (noisy spaCy labels, missed tech terms) but is now stable. - Agreed to split Week 2 by layer rather than by feature: Engineer A owns the search stack (semantic, keyword, hybrid, metadata, context-aware rewriting), Engineer B owns document intelligence (comparison, duplicate detection, summarization) and graph intelligence (technology maps, skill dependencies). - Decided hybrid search will "
-        },
-        {
-          "sentence": "Engineer A owns the search stack, while Engineer B owns document intelligence and graph intelligence [1], [2].",
-          "issue": "low similarity (0.50) to source [1]",
-          "cited_source_index": 1,
-          "cited_source_text": "# Meeting Notes - Week 2 Architecture Review **Date:** Week 2, Monday **Attendees:** Engineer A, Engineer B, Mentor ## Agenda Review Week 1 checkpoint results and align on Week 2 search/RAG architecture before starting implementation. ## Discussion - Week 1 checkpoint confirmed: documents flow end-to-end through Postgres, ChromaDB, and Neo4j on upload. Graph entity quality needed several rounds of fixing (noisy spaCy labels, missed tech terms) but is now stable. - Agreed to split Week 2 by layer rather than by feature: Engineer A owns the search stack (semantic, keyword, hybrid, metadata, context-aware rewriting), Engineer B owns document intelligence (comparison, duplicate detection, summarization) and graph intelligence (technology maps, skill dependencies). - Decided hybrid search will "
-        },
-        {
-          "sentence": "Engineer A owns the search stack, while Engineer B owns document intelligence and graph intelligence [1], [2].",
-          "issue": "low similarity (0.50) to source [2]",
-          "cited_source_index": 2,
-          "cited_source_text": "# Meeting Notes - Week 2 Architecture Review **Date:** Week 2, Monday **Attendees:** Engineer A, Engineer B, Mentor ## Agenda Review Week 1 checkpoint results and align on Week 2 search/RAG architecture before starting implementation. ## Discussion - Week 1 checkpoint confirmed: documents flow end-to-end through Postgres, ChromaDB, and Neo4j on upload. Graph entity quality needed several rounds of fixing (noisy spaCy labels, missed tech terms) but is now stable. - Agreed to split Week 2 by layer rather than by feature: Engineer A owns the search stack (semantic, keyword, hybrid, metadata, context-aware rewriting), Engineer B owns document intelligence (comparison, duplicate detection, summarization) and graph intelligence (technology maps, skill dependencies). - Decided hybrid search will "
-        },
-        {
-          "sentence": "* **Hybrid search scoring method:** Decided to use Reciprocal Rank Fusion instead of a weighted-score blend, as semantic and keyword scores are not on comparable scales [1], [2].",
-          "issue": "low similarity (0.53) to source [1]",
-          "cited_source_index": 1,
-          "cited_source_text": "# Meeting Notes - Week 2 Architecture Review **Date:** Week 2, Monday **Attendees:** Engineer A, Engineer B, Mentor ## Agenda Review Week 1 checkpoint results and align on Week 2 search/RAG architecture before starting implementation. ## Discussion - Week 1 checkpoint confirmed: documents flow end-to-end through Postgres, ChromaDB, and Neo4j on upload. Graph entity quality needed several rounds of fixing (noisy spaCy labels, missed tech terms) but is now stable. - Agreed to split Week 2 by layer rather than by feature: Engineer A owns the search stack (semantic, keyword, hybrid, metadata, context-aware rewriting), Engineer B owns document intelligence (comparison, duplicate detection, summarization) and graph intelligence (technology maps, skill dependencies). - Decided hybrid search will "
-        },
-        {
-          "sentence": "* **Hybrid search scoring method:** Decided to use Reciprocal Rank Fusion instead of a weighted-score blend, as semantic and keyword scores are not on comparable scales [1], [2].",
-          "issue": "low similarity (0.53) to source [2]",
-          "cited_source_index": 2,
-          "cited_source_text": "# Meeting Notes - Week 2 Architecture Review **Date:** Week 2, Monday **Attendees:** Engineer A, Engineer B, Mentor ## Agenda Review Week 1 checkpoint results and align on Week 2 search/RAG architecture before starting implementation. ## Discussion - Week 1 checkpoint confirmed: documents flow end-to-end through Postgres, ChromaDB, and Neo4j on upload. Graph entity quality needed several rounds of fixing (noisy spaCy labels, missed tech terms) but is now stable. - Agreed to split Week 2 by layer rather than by feature: Engineer A owns the search stack (semantic, keyword, hybrid, metadata, context-aware rewriting), Engineer B owns document intelligence (comparison, duplicate detection, summarization) and graph intelligence (technology maps, skill dependencies). - Decided hybrid search will "
-        },
-        {
-          "sentence": "* **Coupling RAG generation and citation checking:** RAG answer generation and citation checking were scoped together as a single connected piece of work because `citation_check.py` requires the same source list used by `generate.py` [1], [2].",
-          "issue": "low similarity (0.53) to source [1]",
-          "cited_source_index": 1,
-          "cited_source_text": "# Meeting Notes - Week 2 Architecture Review **Date:** Week 2, Monday **Attendees:** Engineer A, Engineer B, Mentor ## Agenda Review Week 1 checkpoint results and align on Week 2 search/RAG architecture before starting implementation. ## Discussion - Week 1 checkpoint confirmed: documents flow end-to-end through Postgres, ChromaDB, and Neo4j on upload. Graph entity quality needed several rounds of fixing (noisy spaCy labels, missed tech terms) but is now stable. - Agreed to split Week 2 by layer rather than by feature: Engineer A owns the search stack (semantic, keyword, hybrid, metadata, context-aware rewriting), Engineer B owns document intelligence (comparison, duplicate detection, summarization) and graph intelligence (technology maps, skill dependencies). - Decided hybrid search will "
-        },
-        {
-          "sentence": "* **Coupling RAG generation and citation checking:** RAG answer generation and citation checking were scoped together as a single connected piece of work because `citation_check.py` requires the same source list used by `generate.py` [1], [2].",
-          "issue": "low similarity (0.53) to source [2]",
-          "cited_source_index": 2,
-          "cited_source_text": "# Meeting Notes - Week 2 Architecture Review **Date:** Week 2, Monday **Attendees:** Engineer A, Engineer B, Mentor ## Agenda Review Week 1 checkpoint results and align on Week 2 search/RAG architecture before starting implementation. ## Discussion - Week 1 checkpoint confirmed: documents flow end-to-end through Postgres, ChromaDB, and Neo4j on upload. Graph entity quality needed several rounds of fixing (noisy spaCy labels, missed tech terms) but is now stable. - Agreed to split Week 2 by layer rather than by feature: Engineer A owns the search stack (semantic, keyword, hybrid, metadata, context-aware rewriting), Engineer B owns document intelligence (comparison, duplicate detection, summarization) and graph intelligence (technology maps, skill dependencies). - Decided hybrid search will "
+          "cited_source_text": "# Meeting Notes - Sprint Planning Knowledge Graph **Date:** Week 1, Wednesday **Attendees:** Engineer B, Mentor ## Agenda Plan the entity extraction and graph population work for the knowledge graph feature before Engineer B starts implementation. ## Discussion - Reviewed spaCy NER as the extraction approach (vs. an LLM-based extractor) \u2014 chosen for speed and cost, since it runs on every ingested document and an LLM call per document would be slow and expensive at scale. - Anticipated that raw spaCy NER output would be noisy (DATE/MONEY/TIME entities, merged multi-word tech terms) and agreed this should be treated as an expected first pass to harden through manual testing against real documents, not a one-shot implementation. - Discussed the Document/Entity/MENTIONS/RELATES_TO graph shape:"
         }
       ]
     },
     {
-      "query": "What action items came out of the sprint planning meeting for the knowledge graph feature?",
-      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
-    },
-    {
       "query": "What did the mentor explain about chunking strategy in the recorded onboarding session?",
-      "answer": "Based on the recorded session, the mentor explained several key aspects of the chunking strategy:\n\n* **The Problem with Long/Short Chunks:** Embedding models have limited context windows, and embedding quality degrades on very long chunks because the vector averages too many unrelated ideas into a single point in space [1]. \n  * **Too small:** Ideas become fragmented across multiple chunks, semantic search must guess which fragment is relevant, and necessary surrounding context is lost [1].\n  * **Too large:** A single chunk covers multiple unrelated topics (diluting the embedding) and causes RAG to stuff more irrelevant text into the LLM's context window [1].\n* **EKIE's Strategy:** EKIE uses roughly **800-word chunks with a 120-word overlap** as a balanced middle ground for prose-heavy documentation (though it would be tuned differently for code files) [1, 4].\n* **Purpose of Overlap:** The 120-word overlap ensures that if a sentence explaining an important concept is split at a chunk boundary, it still appears in full inside at least one chunk [1].\n* **Embedding vs. Knowledge Graph (NER):** Chunking only applies to the embedding-facing text for retrieval [1]. The knowledge graph's entity extraction step deliberately runs on the full document text in a single pass rather than using chunks, preventing sentence fragmentation and avoid undercounting or duplicating entity co-occurrence relationships [1].",
+      "answer": "Based on the recorded session, the mentor explained several key aspects of the chunking strategy:\n\n* **Core Problem & Trade-offs:** Embedding models have limited context windows, and embedding quality degrades on overly long chunks because the resulting vector averages too many unrelated ideas into one point [1]. \n  * If chunks are **too small**, ideas become fragmented across multiple chunks, causing semantic search to guess which fragment matters and losing the surrounding context needed to answer queries [1].\n  * If chunks are **too large**, single chunks cover multiple unrelated topics (diluting the embedding) and cause RAG to stuff more irrelevant text into the LLM's context window [1].\n* **EKIE's Configuration:** EKIE uses approximately **800-word chunks with a 120-word overlap** [1]. This configuration serves as a middle ground for prose-heavy documentation (though it would be tuned differently for code files) [1].\n* **Purpose of Overlap:** The overlap ensures that if an important explanatory sentence is split at a chunk boundary, it still appears in full in at least one of the two chunks [1].\n* **Embedding vs. Knowledge Graph Entity Extraction:** Chunking is tuned specifically for retrieval and only runs on the embedding-facing text [1]. The knowledge graph's entity extraction does *not* reuse these chunks; instead, it processes the full document text in a single pass to prevent fragmented sentences and avoid undercounting or duplicating entity co-occurrence relationships [1].",
       "num_sources_offered": 6,
       "num_citations_in_answer": 1,
       "verified": false,
       "flags": [
         {
-          "sentence": "* **Too large:** A single chunk covers multiple unrelated topics (diluting the embedding) and causes RAG to stuff more irrelevant text into the LLM's context window [1].",
-          "issue": "low similarity (0.54) to source [1]",
+          "sentence": "* **EKIE's Configuration:** EKIE uses approximately **800-word chunks with a 120-word overlap** [1].",
+          "issue": "low similarity (0.44) to source [1]",
           "cited_source_index": 1,
           "cited_source_text": "Mentor: So today let's talk about chunking strategy, since it trips up almost every intern who gets to the embedding pipeline step. Mentor: The core problem is that embedding models have a limited context window, and even within that window, embedding quality degrades on very long chunks because the vector ends up averaging too many unrelated ideas into one point in space. Mentor: So you split documents into chunks small enough to stay semantically coherent, but you don't want them too small either, or you lose surrounding context a query might need to actually answer a question. Mentor: EKIE uses roughly 800-word chunks with 120-word overlap. The overlap matters because if a sentence explaining something important gets split exactly at a chunk boundary, overlap means it still shows up in "
         },
         {
-          "sentence": "Knowledge Graph (NER):** Chunking only applies to the embedding-facing text for retrieval [1].",
-          "issue": "low similarity (0.54) to source [1]",
+          "sentence": "This configuration serves as a middle ground for prose-heavy documentation (though it would be tuned differently for code files) [1].",
+          "issue": "low similarity (0.28) to source [1]",
           "cited_source_index": 1,
           "cited_source_text": "Mentor: So today let's talk about chunking strategy, since it trips up almost every intern who gets to the embedding pipeline step. Mentor: The core problem is that embedding models have a limited context window, and even within that window, embedding quality degrades on very long chunks because the vector ends up averaging too many unrelated ideas into one point in space. Mentor: So you split documents into chunks small enough to stay semantically coherent, but you don't want them too small either, or you lose surrounding context a query might need to actually answer a question. Mentor: EKIE uses roughly 800-word chunks with 120-word overlap. The overlap matters because if a sentence explaining something important gets split exactly at a chunk boundary, overlap means it still shows up in "
         },
         {
-          "sentence": "The knowledge graph's entity extraction step deliberately runs on the full document text in a single pass rather than using chunks, preventing sentence fragmentation and avoid undercounting or duplicating entity co-occurrence relationships [1].",
+          "sentence": "* **Purpose of Overlap:** The overlap ensures that if an important explanatory sentence is split at a chunk boundary, it still appears in full in at least one of the two chunks [1].",
+          "issue": "low similarity (0.51) to source [1]",
+          "cited_source_index": 1,
+          "cited_source_text": "Mentor: So today let's talk about chunking strategy, since it trips up almost every intern who gets to the embedding pipeline step. Mentor: The core problem is that embedding models have a limited context window, and even within that window, embedding quality degrades on very long chunks because the vector ends up averaging too many unrelated ideas into one point in space. Mentor: So you split documents into chunks small enough to stay semantically coherent, but you don't want them too small either, or you lose surrounding context a query might need to actually answer a question. Mentor: EKIE uses roughly 800-word chunks with 120-word overlap. The overlap matters because if a sentence explaining something important gets split exactly at a chunk boundary, overlap means it still shows up in "
+        },
+        {
+          "sentence": "Knowledge Graph Entity Extraction:** Chunking is tuned specifically for retrieval and only runs on the embedding-facing text [1].",
           "issue": "low similarity (0.48) to source [1]",
+          "cited_source_index": 1,
+          "cited_source_text": "Mentor: So today let's talk about chunking strategy, since it trips up almost every intern who gets to the embedding pipeline step. Mentor: The core problem is that embedding models have a limited context window, and even within that window, embedding quality degrades on very long chunks because the vector ends up averaging too many unrelated ideas into one point in space. Mentor: So you split documents into chunks small enough to stay semantically coherent, but you don't want them too small either, or you lose surrounding context a query might need to actually answer a question. Mentor: EKIE uses roughly 800-word chunks with 120-word overlap. The overlap matters because if a sentence explaining something important gets split exactly at a chunk boundary, overlap means it still shows up in "
+        },
+        {
+          "sentence": "The knowledge graph's entity extraction does *not* reuse these chunks; instead, it processes the full document text in a single pass to prevent fragmented sentences and avoid undercounting or duplicating entity co-occurrence relationships [1].",
+          "issue": "low similarity (0.41) to source [1]",
           "cited_source_index": 1,
           "cited_source_text": "Mentor: So today let's talk about chunking strategy, since it trips up almost every intern who gets to the embedding pipeline step. Mentor: The core problem is that embedding models have a limited context window, and even within that window, embedding quality degrades on very long chunks because the vector ends up averaging too many unrelated ideas into one point in space. Mentor: So you split documents into chunks small enough to stay semantically coherent, but you don't want them too small either, or you lose surrounding context a query might need to actually answer a question. Mentor: EKIE uses roughly 800-word chunks with 120-word overlap. The overlap matters because if a sentence explaining something important gets split exactly at a chunk boundary, overlap means it still shows up in "
         }
@@ -173,32 +165,32 @@
     },
     {
       "query": "What was discussed in the recorded session about evaluating retrieval quality?",
-      "answer": "Based on the recorded session, the following key points were discussed regarding how to evaluate retrieval quality [1]:\n\n* **Fixed Evaluation Set:** Instead of informally eyeballing example queries, evaluation requires a fixed dataset of realistic queries paired with ground-truth relevant documents to measure whether pipeline changes improve or degrade search [1].\n* **Standard Metrics (Top-$k$):** For each query, the retrieval top-$k$ results are evaluated using three metrics:\n  * **Precision at $k$:** The fraction of the retrieved $k$ documents that are actually relevant [1].\n  * **Recall at $k$:** The fraction of all relevant documents that were successfully retrieved in the top $k$ [1].\n  * **Reciprocal Rank / MRR:** One divided by the rank position of the first relevant result (giving a score of 1 if ranked first, dropping quickly the lower it appears) [1].\n* **Handling Uningested or Missing Documents:** Unresolvable queries referencing documents not yet ingested should not be silently scored as zero, as this mixes fixture errors/typos with real retrieval failures. Instead, they should be skipped and reported separately as a skip count [1].\n* **Document Identification:** Document IDs should not be hardcoded into the evaluation fixture because IDs change whenever the corpus is reseeded. Instead, documents should be referenced by title and resolved to current IDs dynamically at evaluation time to prevent the evaluation set from rotting [1].",
+      "answer": "Based on the recorded session between the Mentor and Intern, the discussion covered the following key points regarding evaluating retrieval quality:\n\n* **Evaluation Ground Truth:** A fixed evaluation set containing realistic queries paired with ground-truth relevant documents is required to reliably measure whether pipeline changes improve or degrade retrieval performance [1].\n* **Standard Evaluation Metrics:** Evaluators take the top-$k$ retrieved results and compute three core metrics [1]:\n  * **Precision at $k$:** The fraction of the $k$ retrieved documents that are actually relevant [1].\n  * **Recall at $k$:** The fraction of all relevant documents that were retrieved within the top $k$ [1].\n  * **Reciprocal Rank (MRR):** Calculated as $1$ over the rank position of the first relevant result (yielding a perfect score of 1 if ranked first, and decreasing the further down it appears) [1].\n* **Handling Unresolvable Documents:** If an evaluation entry references a document not yet ingested (or contains a typo), it should be skipped and reported separately under a skip count rather than silently scored as zero, preventing test fixture issues from masquerading as retrieval failures [1].\n* **Referencing Documents by Title:** Document IDs should not be hardcoded into the evaluation set because they change whenever the corpus is reseeded. Instead, documents should be referenced by title and resolved to current IDs at evaluation time to prevent the evaluation set from rotting [1].",
       "num_sources_offered": 6,
       "num_citations_in_answer": 1,
       "verified": false,
       "flags": [
         {
-          "sentence": "* **Recall at $k$:** The fraction of all relevant documents that were successfully retrieved in the top $k$ [1].",
-          "issue": "low similarity (0.54) to source [1]",
+          "sentence": "* **Recall at $k$:** The fraction of all relevant documents that were retrieved within the top $k$ [1].",
+          "issue": "low similarity (0.51) to source [1]",
           "cited_source_index": 1,
           "cited_source_text": "Mentor: Let's walk through how to actually evaluate whether retrieval is any good, instead of just eyeballing a few example queries and calling it done. Mentor: You need a fixed evaluation set \u2014 a list of realistic queries, each paired with the documents that are actually the correct answer for that query. Without that ground truth, you have no way to measure whether a change to your search pipeline made things better or worse. Mentor: Then for each query, you run it through retrieval, take the top-k results, and compute three standard metrics: precision at k, recall at k, and mean reciprocal rank. Mentor: Precision at k is: of the k documents you retrieved, what fraction were actually relevant. Recall at k is: of all the documents that were actually relevant, what fraction did you manage "
         },
         {
-          "sentence": "* **Reciprocal Rank / MRR:** One divided by the rank position of the first relevant result (giving a score of 1 if ranked first, dropping quickly the lower it appears) [1].",
+          "sentence": "* **Reciprocal Rank (MRR):** Calculated as $1$ over the rank position of the first relevant result (yielding a perfect score of 1 if ranked first, and decreasing the further down it appears) [1].",
           "issue": "low similarity (0.38) to source [1]",
           "cited_source_index": 1,
           "cited_source_text": "Mentor: Let's walk through how to actually evaluate whether retrieval is any good, instead of just eyeballing a few example queries and calling it done. Mentor: You need a fixed evaluation set \u2014 a list of realistic queries, each paired with the documents that are actually the correct answer for that query. Without that ground truth, you have no way to measure whether a change to your search pipeline made things better or worse. Mentor: Then for each query, you run it through retrieval, take the top-k results, and compute three standard metrics: precision at k, recall at k, and mean reciprocal rank. Mentor: Precision at k is: of the k documents you retrieved, what fraction were actually relevant. Recall at k is: of all the documents that were actually relevant, what fraction did you manage "
         },
         {
-          "sentence": "Instead, they should be skipped and reported separately as a skip count [1].",
-          "issue": "low similarity (0.11) to source [1]",
+          "sentence": "* **Handling Unresolvable Documents:** If an evaluation entry references a document not yet ingested (or contains a typo), it should be skipped and reported separately under a skip count rather than silently scored as zero, preventing test fixture issues from masquerading as retrieval failures [1].",
+          "issue": "low similarity (0.46) to source [1]",
           "cited_source_index": 1,
           "cited_source_text": "Mentor: Let's walk through how to actually evaluate whether retrieval is any good, instead of just eyeballing a few example queries and calling it done. Mentor: You need a fixed evaluation set \u2014 a list of realistic queries, each paired with the documents that are actually the correct answer for that query. Without that ground truth, you have no way to measure whether a change to your search pipeline made things better or worse. Mentor: Then for each query, you run it through retrieval, take the top-k results, and compute three standard metrics: precision at k, recall at k, and mean reciprocal rank. Mentor: Precision at k is: of the k documents you retrieved, what fraction were actually relevant. Recall at k is: of all the documents that were actually relevant, what fraction did you manage "
         },
         {
-          "sentence": "Instead, documents should be referenced by title and resolved to current IDs dynamically at evaluation time to prevent the evaluation set from rotting [1].",
-          "issue": "low similarity (0.28) to source [1]",
+          "sentence": "Instead, documents should be referenced by title and resolved to current IDs at evaluation time to prevent the evaluation set from rotting [1].",
+          "issue": "low similarity (0.30) to source [1]",
           "cited_source_index": 1,
           "cited_source_text": "Mentor: Let's walk through how to actually evaluate whether retrieval is any good, instead of just eyeballing a few example queries and calling it done. Mentor: You need a fixed evaluation set \u2014 a list of realistic queries, each paired with the documents that are actually the correct answer for that query. Without that ground truth, you have no way to measure whether a change to your search pipeline made things better or worse. Mentor: Then for each query, you run it through retrieval, take the top-k results, and compute three standard metrics: precision at k, recall at k, and mean reciprocal rank. Mentor: Precision at k is: of the k documents you retrieved, what fraction were actually relevant. Recall at k is: of all the documents that were actually relevant, what fraction did you manage "
         }
@@ -206,7 +198,36 @@
     },
     {
       "query": "What does Ezitech's engineering blog say about choosing between Pinecone and ChromaDB?",
-      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+      "answer": "According to Ezitech's engineering blog, the comparison between ChromaDB and Pinecone centered on the following points:\n\n* **ChromaDB (The Chosen Option):** \n  * It runs embedded or as a lightweight local service, allowing the project to operate entirely via `docker-compose` without requiring external accounts or API keys [1].\n  * It offers straightforward metadata filtering (e.g., category, source type) and low operational overhead, making onboarding quick for new engineers [1].\n  * It won for EKIE due to being local-first, self-contained, and reproducible [1].\n\n* **Pinecone:** \n  * It is a managed, cloud-hosted vector database with strong scaling characteristics suited for large production workloads [1].\n  * However, for EKIE's development needs, it introduces tradeoffs: it requires an external account, has free-tier usage limits, and adds a network dependency to every search [1].\n\nUltimately, ChromaDB was selected for EKIE's docker-compose-based development environment, whereas Pinecone was considered a reasonable option for a much larger-scale production deployment (which was out of scope for the case study) [1].",
+      "num_sources_offered": 6,
+      "num_citations_in_answer": 1,
+      "verified": false,
+      "flags": [
+        {
+          "sentence": "According to Ezitech's engineering blog, the comparison between ChromaDB and Pinecone centered on the following points:\n\n* **ChromaDB (The Chosen Option):** \n  * It runs embedded or as a lightweight local service, allowing the project to operate entirely via `docker-compose` without requiring external accounts or API keys [1].",
+          "issue": "low similarity (0.54) to source [1]",
+          "cited_source_index": 1,
+          "cited_source_text": "Choosing a Vector Database Choosing a Vector Database Ezitech Engineering Blog When we scoped EKIE's embedding pipeline, the vector database choice came down to three realistic options: ChromaDB, Pinecone, and Weaviate. Here's what actually drove the decision, not just a feature checklist. ChromaDB Runs embedded or as a lightweight local service, which matters a lot for a project that needs to run entirely via docker-compose without external accounts or API keys. Metadata filtering (category, source type) is straightforward, and it's simple enough that onboarding a new engineer to the vector store takes minutes, not a half-day reading someone else's cloud console. Pinecone A managed, cloud-hosted vector database with strong scaling characteristics for large production workloads. The tradeo"
+        },
+        {
+          "sentence": "* It offers straightforward metadata filtering (e.g., category, source type) and low operational overhead, making onboarding quick for new engineers [1].",
+          "issue": "low similarity (0.45) to source [1]",
+          "cited_source_index": 1,
+          "cited_source_text": "Choosing a Vector Database Choosing a Vector Database Ezitech Engineering Blog When we scoped EKIE's embedding pipeline, the vector database choice came down to three realistic options: ChromaDB, Pinecone, and Weaviate. Here's what actually drove the decision, not just a feature checklist. ChromaDB Runs embedded or as a lightweight local service, which matters a lot for a project that needs to run entirely via docker-compose without external accounts or API keys. Metadata filtering (category, source type) is straightforward, and it's simple enough that onboarding a new engineer to the vector store takes minutes, not a half-day reading someone else's cloud console. Pinecone A managed, cloud-hosted vector database with strong scaling characteristics for large production workloads. The tradeo"
+        },
+        {
+          "sentence": "* It won for EKIE due to being local-first, self-contained, and reproducible [1].",
+          "issue": "low similarity (0.19) to source [1]",
+          "cited_source_index": 1,
+          "cited_source_text": "Choosing a Vector Database Choosing a Vector Database Ezitech Engineering Blog When we scoped EKIE's embedding pipeline, the vector database choice came down to three realistic options: ChromaDB, Pinecone, and Weaviate. Here's what actually drove the decision, not just a feature checklist. ChromaDB Runs embedded or as a lightweight local service, which matters a lot for a project that needs to run entirely via docker-compose without external accounts or API keys. Metadata filtering (category, source type) is straightforward, and it's simple enough that onboarding a new engineer to the vector store takes minutes, not a half-day reading someone else's cloud console. Pinecone A managed, cloud-hosted vector database with strong scaling characteristics for large production workloads. The tradeo"
+        },
+        {
+          "sentence": "* However, for EKIE's development needs, it introduces tradeoffs: it requires an external account, has free-tier usage limits, and adds a network dependency to every search [1].",
+          "issue": "low similarity (0.54) to source [1]",
+          "cited_source_index": 1,
+          "cited_source_text": "Choosing a Vector Database Choosing a Vector Database Ezitech Engineering Blog When we scoped EKIE's embedding pipeline, the vector database choice came down to three realistic options: ChromaDB, Pinecone, and Weaviate. Here's what actually drove the decision, not just a feature checklist. ChromaDB Runs embedded or as a lightweight local service, which matters a lot for a project that needs to run entirely via docker-compose without external accounts or API keys. Metadata filtering (category, source type) is straightforward, and it's simple enough that onboarding a new engineer to the vector store takes minutes, not a half-day reading someone else's cloud console. Pinecone A managed, cloud-hosted vector database with strong scaling characteristics for large production workloads. The tradeo"
+        }
+      ]
     },
     {
       "query": "What are best practices for prompt engineering according to the internal blog?",
@@ -214,105 +235,91 @@
     },
     {
       "query": "What is Ezitech's data retention policy for uploaded documents?",
-      "answer": "According to Ezitech's **Company Policy - Data Retention**, the retention rules for uploaded documents and related data are as follows [1], [2]:\n\n* **Approved knowledge documents:** Retained indefinitely while actively referenced. They are reviewed for staleness based on the platform's outdated-knowledge detection cadence (such as EKIE's `detect_outdated` heuristic) [1], [2].\n* **Pending/unapproved uploads:** Retained for 90 days. If neither approved nor rejected within that period, they are automatically flagged for admin review and may be purged [1], [2].\n* **Rejected documents:** Retained for 30 days for audit purposes, after which they are deleted along with their vector embeddings and graph nodes [1], [2].\n* **Usage logs (queries, answers, retrieval scores):** Retained for 12 months for evaluation and quality improvement, then aggregated into anonymized metrics while raw logs are deleted [1], [2].\n* **Deletion requests:** Any employee or intern may request the deletion of a document they uploaded. Deletion removes the PostgreSQL record, associated vector embeddings, and any graph nodes/edges supported solely by that document [1], [2].\n* **Restricted uploads:** Documents containing customer data or credentials must never be uploaded to the knowledge platform [1], [2].",
-      "num_sources_offered": 6,
-      "num_citations_in_answer": 2,
-      "verified": false,
-      "flags": [
-        {
-          "sentence": "They are reviewed for staleness based on the platform's outdated-knowledge detection cadence (such as EKIE's `detect_outdated` heuristic) [1], [2].",
-          "issue": "low similarity (0.51) to source [1]",
-          "cited_source_index": 1,
-          "cited_source_text": "# Company Policy - Data Retention **Document type:** Company Policy **Owner:** Ezitech Legal & Security ## Scope Applies to all documents uploaded to Ezitech knowledge platforms, including EKIE, and to any raw text, embeddings, or derived knowledge (e.g. graph entities) generated from them. ## Retention periods - **Approved knowledge documents:** retained indefinitely while actively referenced; reviewed for staleness on the cadence defined by each platform's outdated-knowledge detection (e.g. EKIE's `detect_outdated` staleness heuristic). - **Pending/unapproved uploads:** retained for 90 days. If not approved or rejected within that window, they're automatically flagged for admin review and may be purged. - **Rejected documents:** retained for 30 days for audit purposes, then deleted, incl"
-        },
-        {
-          "sentence": "They are reviewed for staleness based on the platform's outdated-knowledge detection cadence (such as EKIE's `detect_outdated` heuristic) [1], [2].",
-          "issue": "low similarity (0.51) to source [2]",
-          "cited_source_index": 2,
-          "cited_source_text": "# Company Policy - Data Retention **Document type:** Company Policy **Owner:** Ezitech Legal & Security ## Scope Applies to all documents uploaded to Ezitech knowledge platforms, including EKIE, and to any raw text, embeddings, or derived knowledge (e.g. graph entities) generated from them. ## Retention periods - **Approved knowledge documents:** retained indefinitely while actively referenced; reviewed for staleness on the cadence defined by each platform's outdated-knowledge detection (e.g. EKIE's `detect_outdated` staleness heuristic). - **Pending/unapproved uploads:** retained for 90 days. If not approved or rejected within that window, they're automatically flagged for admin review and may be purged. - **Rejected documents:** retained for 30 days for audit purposes, then deleted, incl"
-        },
-        {
-          "sentence": "If neither approved nor rejected within that period, they are automatically flagged for admin review and may be purged [1], [2].",
-          "issue": "low similarity (0.42) to source [1]",
-          "cited_source_index": 1,
-          "cited_source_text": "# Company Policy - Data Retention **Document type:** Company Policy **Owner:** Ezitech Legal & Security ## Scope Applies to all documents uploaded to Ezitech knowledge platforms, including EKIE, and to any raw text, embeddings, or derived knowledge (e.g. graph entities) generated from them. ## Retention periods - **Approved knowledge documents:** retained indefinitely while actively referenced; reviewed for staleness on the cadence defined by each platform's outdated-knowledge detection (e.g. EKIE's `detect_outdated` staleness heuristic). - **Pending/unapproved uploads:** retained for 90 days. If not approved or rejected within that window, they're automatically flagged for admin review and may be purged. - **Rejected documents:** retained for 30 days for audit purposes, then deleted, incl"
-        },
-        {
-          "sentence": "If neither approved nor rejected within that period, they are automatically flagged for admin review and may be purged [1], [2].",
-          "issue": "low similarity (0.42) to source [2]",
-          "cited_source_index": 2,
-          "cited_source_text": "# Company Policy - Data Retention **Document type:** Company Policy **Owner:** Ezitech Legal & Security ## Scope Applies to all documents uploaded to Ezitech knowledge platforms, including EKIE, and to any raw text, embeddings, or derived knowledge (e.g. graph entities) generated from them. ## Retention periods - **Approved knowledge documents:** retained indefinitely while actively referenced; reviewed for staleness on the cadence defined by each platform's outdated-knowledge detection (e.g. EKIE's `detect_outdated` staleness heuristic). - **Pending/unapproved uploads:** retained for 90 days. If not approved or rejected within that window, they're automatically flagged for admin review and may be purged. - **Rejected documents:** retained for 30 days for audit purposes, then deleted, incl"
-        },
-        {
-          "sentence": "Deletion removes the PostgreSQL record, associated vector embeddings, and any graph nodes/edges supported solely by that document [1], [2].",
-          "issue": "low similarity (0.39) to source [1]",
-          "cited_source_index": 1,
-          "cited_source_text": "# Company Policy - Data Retention **Document type:** Company Policy **Owner:** Ezitech Legal & Security ## Scope Applies to all documents uploaded to Ezitech knowledge platforms, including EKIE, and to any raw text, embeddings, or derived knowledge (e.g. graph entities) generated from them. ## Retention periods - **Approved knowledge documents:** retained indefinitely while actively referenced; reviewed for staleness on the cadence defined by each platform's outdated-knowledge detection (e.g. EKIE's `detect_outdated` staleness heuristic). - **Pending/unapproved uploads:** retained for 90 days. If not approved or rejected within that window, they're automatically flagged for admin review and may be purged. - **Rejected documents:** retained for 30 days for audit purposes, then deleted, incl"
-        },
-        {
-          "sentence": "Deletion removes the PostgreSQL record, associated vector embeddings, and any graph nodes/edges supported solely by that document [1], [2].",
-          "issue": "low similarity (0.39) to source [2]",
-          "cited_source_index": 2,
-          "cited_source_text": "# Company Policy - Data Retention **Document type:** Company Policy **Owner:** Ezitech Legal & Security ## Scope Applies to all documents uploaded to Ezitech knowledge platforms, including EKIE, and to any raw text, embeddings, or derived knowledge (e.g. graph entities) generated from them. ## Retention periods - **Approved knowledge documents:** retained indefinitely while actively referenced; reviewed for staleness on the cadence defined by each platform's outdated-knowledge detection (e.g. EKIE's `detect_outdated` staleness heuristic). - **Pending/unapproved uploads:** retained for 90 days. If not approved or rejected within that window, they're automatically flagged for admin review and may be purged. - **Rejected documents:** retained for 30 days for audit purposes, then deleted, incl"
-        },
-        {
-          "sentence": "* **Restricted uploads:** Documents containing customer data or credentials must never be uploaded to the knowledge platform [1], [2].",
-          "issue": "low similarity (0.46) to source [1]",
-          "cited_source_index": 1,
-          "cited_source_text": "# Company Policy - Data Retention **Document type:** Company Policy **Owner:** Ezitech Legal & Security ## Scope Applies to all documents uploaded to Ezitech knowledge platforms, including EKIE, and to any raw text, embeddings, or derived knowledge (e.g. graph entities) generated from them. ## Retention periods - **Approved knowledge documents:** retained indefinitely while actively referenced; reviewed for staleness on the cadence defined by each platform's outdated-knowledge detection (e.g. EKIE's `detect_outdated` staleness heuristic). - **Pending/unapproved uploads:** retained for 90 days. If not approved or rejected within that window, they're automatically flagged for admin review and may be purged. - **Rejected documents:** retained for 30 days for audit purposes, then deleted, incl"
-        },
-        {
-          "sentence": "* **Restricted uploads:** Documents containing customer data or credentials must never be uploaded to the knowledge platform [1], [2].",
-          "issue": "low similarity (0.46) to source [2]",
-          "cited_source_index": 2,
-          "cited_source_text": "# Company Policy - Data Retention **Document type:** Company Policy **Owner:** Ezitech Legal & Security ## Scope Applies to all documents uploaded to Ezitech knowledge platforms, including EKIE, and to any raw text, embeddings, or derived knowledge (e.g. graph entities) generated from them. ## Retention periods - **Approved knowledge documents:** retained indefinitely while actively referenced; reviewed for staleness on the cadence defined by each platform's outdated-knowledge detection (e.g. EKIE's `detect_outdated` staleness heuristic). - **Pending/unapproved uploads:** retained for 90 days. If not approved or rejected within that window, they're automatically flagged for admin review and may be purged. - **Rejected documents:** retained for 30 days for audit purposes, then deleted, incl"
-        }
-      ]
+      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
     },
     {
       "query": "What is the company's policy on using third-party AI APIs with customer data?",
-      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
-    },
-    {
-      "query": "What is Ezitech's remote work policy for interns?",
-      "answer": "Based on Ezitech's Company Policy on Remote Work, the guidelines for interns are as follows:\n\n* **Eligibility and Scope:** Interns may complete their case study fully remotely unless their specific track requires on-site equipment access (which is rare and explicitly flagged in the case study document) [1], [2]. Remote interns have the same deliverable expectations and mentor check-in cadence as on-site interns, with no reduced scope for remote participation [1], [2].\n* **Working Hours:** Interns are expected to be reachable during a consistent 4-hour overlap window with their mentor's working hours, agreed upon during mentor onboarding [1], [2]. Outside of this window, interns may work flexibly as long as deliverables and check-in commitments are met on schedule [1], [2].\n* **Equipment and Access:** Remote interns request access to repositories, tools, and infrastructure through the standard process (via the IT ticket form approved by their mentor), as there is no separate remote-specific access tier [1], [2], [5], [6].\n* **Communication Expectations:** Interns must provide daily asynchronous status updates in the team's working channel during active case-study weeks, and keep their cameras on during weekly mentor check-ins unless connectivity prevents it [1], [2].",
+      "answer": "According to Ezitech's Company Policy on Third-Party AI Usage:\n\n* **Customer Personal Data and Credentials:** Sending customer personal data (such as names, emails, financial information) or credentials to a third-party AI API is **never permitted**, regardless of the provider's stated data-handling terms [1], [2]. Furthermore, documents containing customer data or credentials must never be uploaded to knowledge platforms [3], [4].\n* **Customer-Facing Production Source Code:** Source code from customer-facing production systems requires explicit sign-off from Legal & Security before it can be used in any prompt sent externally [1], [2].",
       "num_sources_offered": 6,
       "num_citations_in_answer": 4,
-      "verified": true,
-      "flags": []
-    },
-    {
-      "query": "What's the difference between the code review SOP and the mentor onboarding SOP?",
-      "answer": "Based on the provided sources, the full details of the **SOP - Code Review Process** are not provided, so a complete comparison cannot be made. \n\nHowever, the sources do outline the **SOP - Mentor Onboarding**, which defines the steps a new mentor must complete before being assigned interns (including access provisioning, shadowing an intern check-in, case-study familiarization, initial intern assignments, and escalation path acknowledgement) to ensure consistent guidance across cohorts [1], [2]. The **SOP - Code Review Process** is only referenced as a related reading/document [1], [3].",
-      "num_sources_offered": 6,
-      "num_citations_in_answer": 3,
       "verified": false,
       "flags": [
         {
-          "sentence": "The **SOP - Code Review Process** is only referenced as a related reading/document [1], [3].",
-          "issue": "low similarity (0.25) to source [1]",
-          "cited_source_index": 1,
-          "cited_source_text": "# SOP - Mentor Onboarding **Document type:** Standard Operating Procedure **Owner:** Ezitech Engineering Enablement **Applies to:** New mentors joining an active internship cohort ## Purpose Defines the steps a new mentor must complete before being assigned interns, so mentor guidance stays consistent across cohorts and interns get a uniform onboarding experience regardless of which mentor they're assigned. ## Procedure 1. **Access provisioning.** Engineering Enablement grants the mentor access to the LMS mentor dashboard, the shared case-study repository, and the mentor Slack channel within 1 business day of the mentor accepting the role. 2. **Shadow session.** The new mentor shadows one full intern check-in run by an existing mentor before taking on their own interns. 3. **Case-study fam"
+          "sentence": "Furthermore, documents containing customer data or credentials must never be uploaded to knowledge platforms [3], [4].",
+          "issue": "low similarity (0.44) to source [3]",
+          "cited_source_index": 3,
+          "cited_source_text": "# Company Policy - Data Retention **Document type:** Company Policy **Owner:** Ezitech Legal & Security ## Scope Applies to all documents uploaded to Ezitech knowledge platforms, including EKIE, and to any raw text, embeddings, or derived knowledge (e.g. graph entities) generated from them. ## Retention periods - **Approved knowledge documents:** retained indefinitely while actively referenced; reviewed for staleness on the cadence defined by each platform's outdated-knowledge detection (e.g. EKIE's `detect_outdated` staleness heuristic). - **Pending/unapproved uploads:** retained for 90 days. If not approved or rejected within that window, they're automatically flagged for admin review and may be purged. - **Rejected documents:** retained for 30 days for audit purposes, then deleted, incl"
         },
         {
-          "sentence": "The **SOP - Code Review Process** is only referenced as a related reading/document [1], [3].",
-          "issue": "low similarity (0.35) to source [3]",
-          "cited_source_index": 3,
-          "cited_source_text": "# Intern Onboarding Checklist **Document type:** Onboarding checklist **Owner:** Ezitech Engineering Enablement **Applies to:** New interns joining any EEF case study track. ## Before day 1 - [ ] Signed intern agreement on file with HR. - [ ] Ezitech email account created. - [ ] Assigned to a mentor and a case-study track. ## Week 1 - [ ] Complete IT access request for GitHub, Slack, and the LMS (see SOP - Access Request Process). - [ ] Read the case study packet for your assigned track in full. - [ ] Read Ezitech Python Coding Standards and SOP - Code Review Process. - [ ] Attend the mentor kickoff check-in. - [ ] Set up local dev environment and confirm the starter repo runs. - [ ] Join the case-study team's working channel. ## Ongoing - [ ] Attend weekly check-ins with your mentor. - [ "
+          "sentence": "Furthermore, documents containing customer data or credentials must never be uploaded to knowledge platforms [3], [4].",
+          "issue": "low similarity (0.44) to source [4]",
+          "cited_source_index": 4,
+          "cited_source_text": "# Company Policy - Data Retention **Document type:** Company Policy **Owner:** Ezitech Legal & Security ## Scope Applies to all documents uploaded to Ezitech knowledge platforms, including EKIE, and to any raw text, embeddings, or derived knowledge (e.g. graph entities) generated from them. ## Retention periods - **Approved knowledge documents:** retained indefinitely while actively referenced; reviewed for staleness on the cadence defined by each platform's outdated-knowledge detection (e.g. EKIE's `detect_outdated` staleness heuristic). - **Pending/unapproved uploads:** retained for 90 days. If not approved or rejected within that window, they're automatically flagged for admin review and may be purged. - **Rejected documents:** retained for 30 days for audit purposes, then deleted, incl"
+        },
+        {
+          "sentence": "* **Customer-Facing Production Source Code:** Source code from customer-facing production systems requires explicit sign-off from Legal & Security before it can be used in any prompt sent externally [1], [2].",
+          "issue": "low similarity (0.49) to source [1]",
+          "cited_source_index": 1,
+          "cited_source_text": "# Company Policy - Third-Party AI Usage **Document type:** Company Policy **Owner:** Ezitech Legal & Security ## Scope Applies to any use of third-party AI APIs (e.g. Google Gemini, OpenAI, Anthropic) within Ezitech products or intern case studies, including EKIE's use of the Gemini API for summarization, comparison, and answer generation. ## What can be sent to a third-party AI API - Internal engineering documentation, SOPs, coding standards, and similar knowledge-base content: **permitted**. - Customer personal data (names, emails, financial information) or credentials: **never permitted**, regardless of the provider's stated data-handling terms. - Source code from customer-facing production systems: requires sign-off from Legal & Security before use in any prompt sent externally. ## Pro"
+        },
+        {
+          "sentence": "* **Customer-Facing Production Source Code:** Source code from customer-facing production systems requires explicit sign-off from Legal & Security before it can be used in any prompt sent externally [1], [2].",
+          "issue": "low similarity (0.49) to source [2]",
+          "cited_source_index": 2,
+          "cited_source_text": "# Company Policy - Third-Party AI Usage **Document type:** Company Policy **Owner:** Ezitech Legal & Security ## Scope Applies to any use of third-party AI APIs (e.g. Google Gemini, OpenAI, Anthropic) within Ezitech products or intern case studies, including EKIE's use of the Gemini API for summarization, comparison, and answer generation. ## What can be sent to a third-party AI API - Internal engineering documentation, SOPs, coding standards, and similar knowledge-base content: **permitted**. - Customer personal data (names, emails, financial information) or credentials: **never permitted**, regardless of the provider's stated data-handling terms. - Source code from customer-facing production systems: requires sign-off from Legal & Security before use in any prompt sent externally. ## Pro"
         }
       ]
     },
     {
-      "query": "How does the Python coding standard relate to the code review SOP's approval criteria?",
+      "query": "What is Ezitech's remote work policy for interns?",
       "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
     },
     {
+      "query": "What's the difference between the code review SOP and the mentor onboarding SOP?",
+      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+    },
+    {
+      "query": "How does the Python coding standard relate to the code review SOP's approval criteria?",
+      "error": "LLM request timed out"
+    },
+    {
       "query": "Is there a documented SOP for offboarding an intern at the end of their program?",
-      "answer": "Based on the provided sources, there is no documented SOP for offboarding an intern. \n\nThe sources only note that under the *SOP - Access Request Process*, all intern access is automatically reviewed and revoked at the end of their case study unless explicitly extended by a mentor [3], [4], and the *Intern Onboarding Checklist* outlines tasks to complete before the final week (such as confirming deliverables and scheduling a live demonstration) [1], [2]. However, a dedicated intern offboarding SOP is not documented in the provided materials.",
+      "answer": "Based on the provided sources, there is no documented standard operating procedure (SOP) specifically for offboarding an intern [1][3][5]. \n\nThe sources only note related end-of-program items:\n* **Access Revocation:** All intern access is reviewed and automatically revoked at the end of their case study unless explicitly extended by a mentor (documented in *SOP - Access Request Process*) [3], [4].\n* **Final Week Checklist:** Interns must confirm all deliverables are complete (or explicitly scoped out with documented reasons) and schedule a live demonstration slot with their mentor (documented in the *Intern Onboarding Checklist*) [1], [2].",
       "num_sources_offered": 6,
-      "num_citations_in_answer": 4,
-      "verified": true,
-      "flags": []
+      "num_citations_in_answer": 5,
+      "verified": false,
+      "flags": [
+        {
+          "sentence": "Based on the provided sources, there is no documented standard operating procedure (SOP) specifically for offboarding an intern [1][3][5].",
+          "issue": "low similarity (0.47) to source [1]",
+          "cited_source_index": 1,
+          "cited_source_text": "# Intern Onboarding Checklist **Document type:** Onboarding checklist **Owner:** Ezitech Engineering Enablement **Applies to:** New interns joining any EEF case study track. ## Before day 1 - [ ] Signed intern agreement on file with HR. - [ ] Ezitech email account created. - [ ] Assigned to a mentor and a case-study track. ## Week 1 - [ ] Complete IT access request for GitHub, Slack, and the LMS (see SOP - Access Request Process). - [ ] Read the case study packet for your assigned track in full. - [ ] Read Ezitech Python Coding Standards and SOP - Code Review Process. - [ ] Attend the mentor kickoff check-in. - [ ] Set up local dev environment and confirm the starter repo runs. - [ ] Join the case-study team's working channel. ## Ongoing - [ ] Attend weekly check-ins with your mentor. - [ "
+        },
+        {
+          "sentence": "Based on the provided sources, there is no documented standard operating procedure (SOP) specifically for offboarding an intern [1][3][5].",
+          "issue": "low similarity (0.39) to source [3]",
+          "cited_source_index": 3,
+          "cited_source_text": "# SOP - Access Request Process **Document type:** Standard Operating Procedure **Owner:** Ezitech IT & Security **Applies to:** Interns and mentors requesting access to internal repositories, tools, and infrastructure. ## Purpose Ensures access to internal systems is granted deliberately, tracked, and scoped to what's actually needed for the requester's current case study \u2014 not handed out ad hoc over Slack DMs. ## Who can request access Any active intern or mentor may request access. Requests on behalf of someone else (e.g. a mentor requesting for their whole team) must name each individual explicitly. ## How to request access 1. Submit an access request via the IT ticket form, specifying: - The system/repo/tool needed (e.g. \"EKIE GitHub repo, read/write\") - The business reason (e.g. \"assi"
+        },
+        {
+          "sentence": "Based on the provided sources, there is no documented standard operating procedure (SOP) specifically for offboarding an intern [1][3][5].",
+          "issue": "low similarity (0.52) to source [5]",
+          "cited_source_index": 5,
+          "cited_source_text": "# SOP - Mentor Onboarding **Document type:** Standard Operating Procedure **Owner:** Ezitech Engineering Enablement **Applies to:** New mentors joining an active internship cohort ## Purpose Defines the steps a new mentor must complete before being assigned interns, so mentor guidance stays consistent across cohorts and interns get a uniform onboarding experience regardless of which mentor they're assigned. ## Procedure 1. **Access provisioning.** Engineering Enablement grants the mentor access to the LMS mentor dashboard, the shared case-study repository, and the mentor Slack channel within 1 business day of the mentor accepting the role. 2. **Shadow session.** The new mentor shadows one full intern check-in run by an existing mentor before taking on their own interns. 3. **Case-study fam"
+        },
+        {
+          "sentence": "The sources only note related end-of-program items:\n* **Access Revocation:** All intern access is reviewed and automatically revoked at the end of their case study unless explicitly extended by a mentor (documented in *SOP - Access Request Process*) [3], [4].",
+          "issue": "low similarity (0.54) to source [3]",
+          "cited_source_index": 3,
+          "cited_source_text": "# SOP - Access Request Process **Document type:** Standard Operating Procedure **Owner:** Ezitech IT & Security **Applies to:** Interns and mentors requesting access to internal repositories, tools, and infrastructure. ## Purpose Ensures access to internal systems is granted deliberately, tracked, and scoped to what's actually needed for the requester's current case study \u2014 not handed out ad hoc over Slack DMs. ## Who can request access Any active intern or mentor may request access. Requests on behalf of someone else (e.g. a mentor requesting for their whole team) must name each individual explicitly. ## How to request access 1. Submit an access request via the IT ticket form, specifying: - The system/repo/tool needed (e.g. \"EKIE GitHub repo, read/write\") - The business reason (e.g. \"assi"
+        },
+        {
+          "sentence": "The sources only note related end-of-program items:\n* **Access Revocation:** All intern access is reviewed and automatically revoked at the end of their case study unless explicitly extended by a mentor (documented in *SOP - Access Request Process*) [3], [4].",
+          "issue": "low similarity (0.54) to source [4]",
+          "cited_source_index": 4,
+          "cited_source_text": "# SOP - Access Request Process **Document type:** Standard Operating Procedure **Owner:** Ezitech IT & Security **Applies to:** Interns and mentors requesting access to internal repositories, tools, and infrastructure. ## Purpose Ensures access to internal systems is granted deliberately, tracked, and scoped to what's actually needed for the requester's current case study \u2014 not handed out ad hoc over Slack DMs. ## Who can request access Any active intern or mentor may request access. Requests on behalf of someone else (e.g. a mentor requesting for their whole team) must name each individual explicitly. ## How to request access 1. Submit an access request via the IT ticket form, specifying: - The system/repo/tool needed (e.g. \"EKIE GitHub repo, read/write\") - The business reason (e.g. \"assi"
+        }
+      ]
     }
   ]
 }

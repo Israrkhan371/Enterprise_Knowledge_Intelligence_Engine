@@ -1,0 +1,161 @@
+{
+  "summary": {
+    "num_queries_in_full_eval_set": 40,
+    "num_queries_this_run": 20,
+    "offset": 0,
+    "num_scored": 4,
+    "num_errored": 16,
+    "num_errored_quota_exhausted": 0,
+    "num_answers_with_no_citations": 1,
+    "num_answers_with_citations": 3,
+    "citation_accuracy_rate": 0.0,
+    "flag_breakdown": {
+      "claim_not_supported_by_cited_source": 7
+    },
+    "total_flags": 7,
+    "k": 6
+  },
+  "per_query": [
+    {
+      "query": "How do I set up the internship onboarding checklist?",
+      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+    },
+    {
+      "query": "What is the duration and team size for the Enterprise Knowledge Intelligence Engine case study?",
+      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+    },
+    {
+      "query": "What are the bonus challenges available for the EKIE case study?",
+      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+    },
+    {
+      "query": "What deliverables are required for an EEF industry AI case study?",
+      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+    },
+    {
+      "query": "How is an intern's case study graded, and what is each evaluation criterion worth?",
+      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+    },
+    {
+      "query": "What is Ezitech's coding standard for Python projects?",
+      "error": "LLM request timed out"
+    },
+    {
+      "query": "What naming conventions should I use for variables and functions in Ezitech projects?",
+      "answer": "According to the Ezitech Python Coding Standards, the naming conventions for variables and functions are:\n\n* **Variables and functions:** Use `snake_case` (e.g., `chunk_text`, `document_id`) [1], [2].\n* **Private/internal helpers:** Prefix with a single underscore (e.g., `_chunk_embed_store`, `_populate_graph`) [1], [2].\n* **Descriptive naming:** Names should describe intent rather than implementation (e.g., use `retrieved_ids` instead of `lst2`) [1], [2].",
+      "num_sources_offered": 6,
+      "num_citations_in_answer": 2,
+      "verified": false,
+      "flags": [
+        {
+          "sentence": "* **Descriptive naming:** Names should describe intent rather than implementation (e.g., use `retrieved_ids` instead of `lst2`) [1], [2].",
+          "issue": "low similarity (0.44) to source [1]",
+          "cited_source_index": 1,
+          "cited_source_text": "# Ezitech Python Coding Standards **Document type:** Coding Standard **Owner:** Ezitech Engineering **Applies to:** All Python code in Ezitech and intern-built repositories. ## Naming conventions - **Variables and functions:** `snake_case` (e.g. `chunk_text`, `document_id`). - **Classes:** `PascalCase` (e.g. `GraphStore`, `DocumentChunk`). - **Constants:** `UPPER_SNAKE_CASE` (e.g. `MAX_CONFIDENCE`, `SOURCE_LOADERS`). - **Private/internal helpers:** prefix with a single underscore (e.g. `_chunk_embed_store`, `_populate_graph`). - Names should describe intent, not implementation \u2014 `retrieved_ids` not `lst2`. ## Type hints and docstrings - All public functions must have type hints on parameters and return values. - All public functions must have a docstring explaining *why*, not just *what* \u2014"
+        },
+        {
+          "sentence": "* **Descriptive naming:** Names should describe intent rather than implementation (e.g., use `retrieved_ids` instead of `lst2`) [1], [2].",
+          "issue": "low similarity (0.44) to source [2]",
+          "cited_source_index": 2,
+          "cited_source_text": "# Ezitech Python Coding Standards **Document type:** Coding Standard **Owner:** Ezitech Engineering **Applies to:** All Python code in Ezitech and intern-built repositories. ## Naming conventions - **Variables and functions:** `snake_case` (e.g. `chunk_text`, `document_id`). - **Classes:** `PascalCase` (e.g. `GraphStore`, `DocumentChunk`). - **Constants:** `UPPER_SNAKE_CASE` (e.g. `MAX_CONFIDENCE`, `SOURCE_LOADERS`). - **Private/internal helpers:** prefix with a single underscore (e.g. `_chunk_embed_store`, `_populate_graph`). - Names should describe intent, not implementation \u2014 `retrieved_ids` not `lst2`. ## Type hints and docstrings - All public functions must have type hints on parameters and return values. - All public functions must have a docstring explaining *why*, not just *what* \u2014"
+        }
+      ]
+    },
+    {
+      "query": "What is the required code review process before merging a pull request?",
+      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+    },
+    {
+      "query": "Does Ezitech require type hints and docstrings on all Python functions?",
+      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+    },
+    {
+      "query": "What is the SOP for onboarding a new mentor?",
+      "answer": "Based on the **SOP - Mentor Onboarding**, the procedure for onboarding a new mentor joining an active internship cohort is as follows [1], [2]:\n\n### **Purpose**\nTo define the steps a new mentor must complete before being assigned interns, ensuring consistent guidance across cohorts and a uniform onboarding experience for interns [1], [2].\n\n---\n\n### **Procedure**\n1. **Access Provisioning:** Engineering Enablement grants the mentor access to the LMS mentor dashboard, the shared case-study repository, and the mentor Slack channel within 1 business day of the mentor accepting the role [1], [2].\n2. **Shadow Session:** The new mentor shadows one full intern check-in conducted by an existing mentor before taking on their own interns [1], [2].\n3. **Case-Study Familiarization:** The mentor reads the case study packet(s) for their assigned track (e.g., AI-007) and passes a mentor quiz confirming their understanding of the evaluation criteria [1], [2].\n4. **First Assignment:** The mentor is initially assigned 1\u20132 interns, with the ability to scale up after a successful 2-week checkpoint review [1], [2].\n5. **Escalation Path Acknowledgement:** The mentor confirms they have read *SOP - Escalation Procedures* and understand who to contact if an intern is unresponsive or if a case study is at risk [1], [2].\n\n---\n\n### **Response-Time Expectations**\n* Mentors are expected to respond to intern check-ins within **48 hours** [1], [2].\n* If a mentor is unresponsive for more than 48 hours, the case should be escalated according to *SOP - Escalation Procedures*, routing first to the mentor's manager and then to Engineering Enablement if unresolved [1], [2].",
+      "num_sources_offered": 6,
+      "num_citations_in_answer": 2,
+      "verified": false,
+      "flags": [
+        {
+          "sentence": "---\n\n### **Response-Time Expectations**\n* Mentors are expected to respond to intern check-ins within **48 hours** [1], [2].",
+          "issue": "low similarity (0.54) to source [1]",
+          "cited_source_index": 1,
+          "cited_source_text": "# SOP - Mentor Onboarding **Document type:** Standard Operating Procedure **Owner:** Ezitech Engineering Enablement **Applies to:** New mentors joining an active internship cohort ## Purpose Defines the steps a new mentor must complete before being assigned interns, so mentor guidance stays consistent across cohorts and interns get a uniform onboarding experience regardless of which mentor they're assigned. ## Procedure 1. **Access provisioning.** Engineering Enablement grants the mentor access to the LMS mentor dashboard, the shared case-study repository, and the mentor Slack channel within 1 business day of the mentor accepting the role. 2. **Shadow session.** The new mentor shadows one full intern check-in run by an existing mentor before taking on their own interns. 3. **Case-study fam"
+        },
+        {
+          "sentence": "---\n\n### **Response-Time Expectations**\n* Mentors are expected to respond to intern check-ins within **48 hours** [1], [2].",
+          "issue": "low similarity (0.54) to source [2]",
+          "cited_source_index": 2,
+          "cited_source_text": "# SOP - Mentor Onboarding **Document type:** Standard Operating Procedure **Owner:** Ezitech Engineering Enablement **Applies to:** New mentors joining an active internship cohort ## Purpose Defines the steps a new mentor must complete before being assigned interns, so mentor guidance stays consistent across cohorts and interns get a uniform onboarding experience regardless of which mentor they're assigned. ## Procedure 1. **Access provisioning.** Engineering Enablement grants the mentor access to the LMS mentor dashboard, the shared case-study repository, and the mentor Slack channel within 1 business day of the mentor accepting the role. 2. **Shadow session.** The new mentor shadows one full intern check-in run by an existing mentor before taking on their own interns. 3. **Case-study fam"
+        },
+        {
+          "sentence": "* If a mentor is unresponsive for more than 48 hours, the case should be escalated according to *SOP - Escalation Procedures*, routing first to the mentor's manager and then to Engineering Enablement if unresolved [1], [2].",
+          "issue": "low similarity (0.49) to source [1]",
+          "cited_source_index": 1,
+          "cited_source_text": "# SOP - Mentor Onboarding **Document type:** Standard Operating Procedure **Owner:** Ezitech Engineering Enablement **Applies to:** New mentors joining an active internship cohort ## Purpose Defines the steps a new mentor must complete before being assigned interns, so mentor guidance stays consistent across cohorts and interns get a uniform onboarding experience regardless of which mentor they're assigned. ## Procedure 1. **Access provisioning.** Engineering Enablement grants the mentor access to the LMS mentor dashboard, the shared case-study repository, and the mentor Slack channel within 1 business day of the mentor accepting the role. 2. **Shadow session.** The new mentor shadows one full intern check-in run by an existing mentor before taking on their own interns. 3. **Case-study fam"
+        },
+        {
+          "sentence": "* If a mentor is unresponsive for more than 48 hours, the case should be escalated according to *SOP - Escalation Procedures*, routing first to the mentor's manager and then to Engineering Enablement if unresolved [1], [2].",
+          "issue": "low similarity (0.49) to source [2]",
+          "cited_source_index": 2,
+          "cited_source_text": "# SOP - Mentor Onboarding **Document type:** Standard Operating Procedure **Owner:** Ezitech Engineering Enablement **Applies to:** New mentors joining an active internship cohort ## Purpose Defines the steps a new mentor must complete before being assigned interns, so mentor guidance stays consistent across cohorts and interns get a uniform onboarding experience regardless of which mentor they're assigned. ## Procedure 1. **Access provisioning.** Engineering Enablement grants the mentor access to the LMS mentor dashboard, the shared case-study repository, and the mentor Slack channel within 1 business day of the mentor accepting the role. 2. **Shadow session.** The new mentor shadows one full intern check-in run by an existing mentor before taking on their own interns. 3. **Case-study fam"
+        }
+      ]
+    },
+    {
+      "query": "What is the standard procedure for reporting a production incident?",
+      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+    },
+    {
+      "query": "How should an intern request access to internal repositories and tools?",
+      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+    },
+    {
+      "query": "What is the escalation path if a mentor is unresponsive for more than 48 hours?",
+      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+    },
+    {
+      "query": "How is the ingestion pipeline structured in the EKIE repository?",
+      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+    },
+    {
+      "query": "Where is entity and relationship extraction implemented for the knowledge graph?",
+      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+    },
+    {
+      "query": "How does the hybrid search endpoint combine semantic and keyword results?",
+      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+    },
+    {
+      "query": "Where are the FastAPI routes for the knowledge platform defined?",
+      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+    },
+    {
+      "query": "What request body does the POST /ask endpoint expect?",
+      "answer": "Based on the provided sources, the exact request body expected by the `POST /ask` endpoint is not mentioned.",
+      "num_sources_offered": 6,
+      "num_citations_in_answer": 0,
+      "verified": true,
+      "flags": []
+    },
+    {
+      "query": "What parameters does the /search/hybrid endpoint accept?",
+      "answer": "Based on the provided sources, the `/api/v1/search/hybrid` endpoint accepts the following query parameters:\n\n- **`q`** [query] (required) [1]\n- **`top_k`** [query] [1]\n- **`category_filter`** [query] [1]\n- **`use_reranker`** [query] (controls cross-encoder reranking) [2]\n- **`rerank_pool_size`** [query] (specifies the candidate pool size for reranking) [2, 4]",
+      "num_sources_offered": 6,
+      "num_citations_in_answer": 2,
+      "verified": false,
+      "flags": [
+        {
+          "sentence": "Based on the provided sources, the `/api/v1/search/hybrid` endpoint accepts the following query parameters:\n\n- **`q`** [query] (required) [1]\n- **`top_k`** [query] [1]\n- **`category_filter`** [query] [1]\n- **`use_reranker`** [query] (controls cross-encoder reranking) [2]\n- **`rerank_pool_size`** [query] (specifies the candidate pool size for reranking) [2, 4]",
+          "issue": "low similarity (0.50) to source [2]",
+          "cited_source_index": 2,
+          "cited_source_text": "a stuck processing state.** It isn't \u2014 ingestion is fully synchronous (see \"Document lifecycle\" above) and `status` only tracks admin review. Documented explicitly in the upload/approve endpoint descriptions (visible in `/docs`) and in this README, including the fact that unapproved documents are currently still searchable (flagged as a deliberate not-changed-here item, not silently \"fixed\" by adding a filter that would change existing behavior). - **`hybrid_search()` had no reranking stage** \u2014 RRF fusion alone (bi-encoder cosine similarity + BM25-style `ts_rank`) scores the query and each chunk independently, which misses things like word order and negation. Added `app/search/rerank.py`: a `cross-encoder/ms-marco-MiniLM-L-6-v2` cross-encoder (already covered by the existing `sentence-tran"
+        }
+      ]
+    },
+    {
+      "query": "What HTTP status code does the document summary endpoint return for a missing document?",
+      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+    }
+  ]
+}

@@ -711,7 +711,10 @@ docstring on `run_evaluation()`.
 the *generated answer* correctly cite what it retrieved?) is evaluated by
 `scripts/check_citation_accuracy.py` over the same 40-query set. See
 [docs/evaluation_report.md](docs/evaluation_report.md) for methodology,
-current retrieval-accuracy results, and how to run it.
+current results (13/40 queries scored as of Aug 19, still in progress),
+and how to run it — note the free-tier Gemini quota (20 requests/day/model)
+means this typically takes several `--offset`/`--limit` runs across
+multiple days to cover the full set.
 
 ## Known flaws fixed in this pass
 

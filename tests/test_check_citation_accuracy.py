@@ -41,7 +41,7 @@ def test_run_computes_accuracy_only_over_cited_answers(
     ]
     mock_verify_citations.side_effect = [
         {"cited_sources": [1], "flags": [], "verified": True},
-        {"cited_sources": [1], "flags": [{"sentence": "Claim.", "issue": "low similarity (0.10) to source [1]"}], "verified": False},
+        {"cited_sources": [1], "flags": [{"sentence": "Claim.", "kind": "low_relevance", "cited_source_index": 1, "score": 0.10, "issue": "low relevance (0.10) to source [1]"}], "verified": False},
         {"cited_sources": [], "flags": [], "verified": True},
     ]
 
@@ -186,7 +186,7 @@ def test_run_enriches_flags_with_the_cited_source_text(
     }
     mock_verify_citations.return_value = {
         "cited_sources": [2],
-        "flags": [{"sentence": "Claim. [2]", "issue": "low similarity (0.31) to source [2]"}],
+        "flags": [{"sentence": "Claim. [2]", "kind": "low_relevance", "cited_source_index": 2, "score": 0.31, "issue": "low relevance (0.31) to source [2]"}],
         "verified": False,
     }
 
@@ -198,4 +198,4 @@ def test_run_enriches_flags_with_the_cited_source_text(
     assert flag["cited_source_text"] == "The actual cited source's full content, for comparison against the claim."
     # original fields are preserved, not replaced
     assert flag["sentence"] == "Claim. [2]"
-    assert flag["issue"] == "low similarity (0.31) to source [2]"
+    assert flag["issue"] == "low relevance (0.31) to source [2]"

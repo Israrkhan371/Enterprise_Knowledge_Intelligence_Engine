@@ -3,22 +3,43 @@
     "num_queries_in_full_eval_set": 40,
     "num_queries_this_run": 20,
     "offset": 0,
-    "num_scored": 4,
-    "num_errored": 16,
+    "num_scored": 9,
+    "num_errored": 11,
     "num_errored_quota_exhausted": 0,
-    "num_answers_with_no_citations": 1,
-    "num_answers_with_citations": 3,
-    "citation_accuracy_rate": 0.0,
+    "num_answers_with_no_citations": 2,
+    "num_answers_with_citations": 7,
+    "citation_accuracy_rate": 0.286,
     "flag_breakdown": {
-      "claim_not_supported_by_cited_source": 7
+      "claim_not_supported_by_cited_source": 15
     },
-    "total_flags": 7,
+    "total_flags": 15,
     "k": 6
   },
   "per_query": [
     {
       "query": "How do I set up the internship onboarding checklist?",
-      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+      "answer": "Based on the Intern Onboarding Checklist, the required tasks across each phase are [1], [2]:\n\n### **Before Day 1**\n* Signed intern agreement on file with HR [1], [2].\n* Ezitech email account created [1], [2].\n* Assigned to a mentor and a case-study track [1], [2].\n\n---\n\n### **Week 1**\n* Complete IT access request for GitHub, Slack, and the LMS (refer to *SOP - Access Request Process*) [1], [2].\n* Read the case study packet for your assigned track in full [1], [2].\n* Read *Ezitech Python Coding Standards* and *SOP - Code Review Process* [1], [2].\n* Attend the mentor kickoff check-in [1], [2].\n* Set up the local development environment and confirm the starter repository runs [1], [2].\n* Join the case-study team's working channel [1], [2].\n\n---\n\n### **Ongoing**\n* Attend weekly check-ins with your mentor [1], [2].\n* Keep the weekly tracker updated with task status and evidence (what was verified, how, and any bugs found/fixed) [1], [2].\n* Escalate blockers per *SOP - Escalation Procedures* rather than letting them sit past a check-in cycle [1], [2].\n\n---\n\n### **Before the Final Week**\n* Confirm all deliverables from the case study document are either complete or explicitly scoped out with a documented reason [1], [2].\n* Schedule the live demonstration slot with your mentor [1], [2].",
+      "num_sources_offered": 6,
+      "num_citations_in_answer": 2,
+      "verified": false,
+      "flags": [
+        {
+          "sentence": "* Keep the weekly tracker updated with task status and evidence (what was verified, how, and any bugs found/fixed) [1], [2].",
+          "kind": "low_relevance",
+          "cited_source_index": 1,
+          "score": -2.082304000854492,
+          "issue": "low relevance (-2.08) to source [1]",
+          "cited_source_text": "# Intern Onboarding Checklist **Document type:** Onboarding checklist **Owner:** Ezitech Engineering Enablement **Applies to:** New interns joining any EEF case study track. ## Before day 1 - [ ] Signed intern agreement on file with HR. - [ ] Ezitech email account created. - [ ] Assigned to a mentor and a case-study track. ## Week 1 - [ ] Complete IT access request for GitHub, Slack, and the LMS (see SOP - Access Request Process). - [ ] Read the case study packet for your assigned track in full. - [ ] Read Ezitech Python Coding Standards and SOP - Code Review Process. - [ ] Attend the mentor kickoff check-in. - [ ] Set up local dev environment and confirm the starter repo runs. - [ ] Join the case-study team's working channel. ## Ongoing - [ ] Attend weekly check-ins with your mentor. - [ "
+        },
+        {
+          "sentence": "* Keep the weekly tracker updated with task status and evidence (what was verified, how, and any bugs found/fixed) [1], [2].",
+          "kind": "low_relevance",
+          "cited_source_index": 2,
+          "score": -2.082304000854492,
+          "issue": "low relevance (-2.08) to source [2]",
+          "cited_source_text": "# Intern Onboarding Checklist **Document type:** Onboarding checklist **Owner:** Ezitech Engineering Enablement **Applies to:** New interns joining any EEF case study track. ## Before day 1 - [ ] Signed intern agreement on file with HR. - [ ] Ezitech email account created. - [ ] Assigned to a mentor and a case-study track. ## Week 1 - [ ] Complete IT access request for GitHub, Slack, and the LMS (see SOP - Access Request Process). - [ ] Read the case study packet for your assigned track in full. - [ ] Read Ezitech Python Coding Standards and SOP - Code Review Process. - [ ] Attend the mentor kickoff check-in. - [ ] Set up local dev environment and confirm the starter repo runs. - [ ] Join the case-study team's working channel. ## Ongoing - [ ] Attend weekly check-ins with your mentor. - [ "
+        }
+      ]
     },
     {
       "query": "What is the duration and team size for the Enterprise Knowledge Intelligence Engine case study?",
@@ -26,7 +47,28 @@
     },
     {
       "query": "What are the bonus challenges available for the EKIE case study?",
-      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+      "answer": "Based on the EKIE case study documentation, the bonus challenges are [4], [5]:\n\n* Automatic knowledge graph expansion\n* AI citation verification\n* Document version intelligence\n* Voice-based knowledge search\n* Knowledge gap detection\n* Automatic FAQ generation\n* AI documentation quality scoring",
+      "num_sources_offered": 6,
+      "num_citations_in_answer": 2,
+      "verified": false,
+      "flags": [
+        {
+          "sentence": "Based on the EKIE case study documentation, the bonus challenges are [4], [5]:\n\n* Automatic knowledge graph expansion\n* AI citation verification\n* Document version intelligence\n* Voice-based knowledge search\n* Knowledge gap detection\n* Automatic FAQ generation\n* AI documentation quality scoring",
+          "kind": "low_relevance",
+          "cited_source_index": 4,
+          "score": -2.000797748565674,
+          "issue": "low relevance (-2.00) to source [4]",
+          "cited_source_text": "# Case Study - AI-007 Enterprise Knowledge Intelligence Engine **Ezitech Engineering Framework (EEF) \u2014 Industry AI Case Study AI-007** **Duration:** 5 Weeks **Team Size:** 2 AI Engineers ## Project background Ezitech maintains a growing collection of engineering assets including internship case studies, mentor documentation, coding standards, project documentation, LMS content, recorded sessions, technical notes, GitHub repositories, research papers, and internal SOPs. This knowledge is scattered across multiple platforms, making it difficult for interns and mentors to quickly locate accurate information. The team is assigned to design and develop an Enterprise Knowledge Intelligence Engine (EKIE) capable of indexing, understanding, retrieving, and reasoning over all organizational knowled"
+        },
+        {
+          "sentence": "Based on the EKIE case study documentation, the bonus challenges are [4], [5]:\n\n* Automatic knowledge graph expansion\n* AI citation verification\n* Document version intelligence\n* Voice-based knowledge search\n* Knowledge gap detection\n* Automatic FAQ generation\n* AI documentation quality scoring",
+          "kind": "low_relevance",
+          "cited_source_index": 5,
+          "score": -2.000797748565674,
+          "issue": "low relevance (-2.00) to source [5]",
+          "cited_source_text": "# Case Study - AI-007 Enterprise Knowledge Intelligence Engine **Ezitech Engineering Framework (EEF) \u2014 Industry AI Case Study AI-007** **Duration:** 5 Weeks **Team Size:** 2 AI Engineers ## Project background Ezitech maintains a growing collection of engineering assets including internship case studies, mentor documentation, coding standards, project documentation, LMS content, recorded sessions, technical notes, GitHub repositories, research papers, and internal SOPs. This knowledge is scattered across multiple platforms, making it difficult for interns and mentors to quickly locate accurate information. The team is assigned to design and develop an Enterprise Knowledge Intelligence Engine (EKIE) capable of indexing, understanding, retrieving, and reasoning over all organizational knowled"
+        }
+      ]
     },
     {
       "query": "What deliverables are required for an EEF industry AI case study?",
@@ -34,29 +76,37 @@
     },
     {
       "query": "How is an intern's case study graded, and what is each evaluation criterion worth?",
-      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+      "answer": "Under the Ezitech Engineering Framework (EEF), case studies are evaluated across standard dimensions including architecture quality, functional accuracy, scalability, business value, documentation quality, innovation, and presentation, with exact weightings specified in each individual case study document [1], [2].\n\nFor the **AI-007 Enterprise Knowledge Intelligence Engine** case study, the evaluation criteria and their respective weights are:\n\n* **AI Architecture:** 20% [5], [6]\n* **Knowledge Retrieval Accuracy:** 20% [5], [6]\n* **Scalability:** 15% [5], [6]\n* **Business Value:** 15% [5], [6]\n* **Documentation:** 10% [5], [6]\n* **Innovation:** 10% [5], [6]\n* **Presentation:** 10% [5], [6]",
+      "num_sources_offered": 6,
+      "num_citations_in_answer": 4,
+      "verified": true,
+      "flags": []
     },
     {
       "query": "What is Ezitech's coding standard for Python projects?",
-      "error": "LLM request timed out"
+      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
     },
     {
       "query": "What naming conventions should I use for variables and functions in Ezitech projects?",
-      "answer": "According to the Ezitech Python Coding Standards, the naming conventions for variables and functions are:\n\n* **Variables and functions:** Use `snake_case` (e.g., `chunk_text`, `document_id`) [1], [2].\n* **Private/internal helpers:** Prefix with a single underscore (e.g., `_chunk_embed_store`, `_populate_graph`) [1], [2].\n* **Descriptive naming:** Names should describe intent rather than implementation (e.g., use `retrieved_ids` instead of `lst2`) [1], [2].",
+      "answer": "According to the Ezitech Python Coding Standards, variables and functions must use **`snake_case`** (e.g., `chunk_text`, `document_id`) [1], [2]. \n\nAdditionally, names should describe intent rather than implementation (for example, use `retrieved_ids` instead of `lst2`) [1], [2]. Private or internal helpers should be prefixed with a single underscore (e.g., `_chunk_embed_store`, `_populate_graph`) [1], [2].",
       "num_sources_offered": 6,
       "num_citations_in_answer": 2,
       "verified": false,
       "flags": [
         {
-          "sentence": "* **Descriptive naming:** Names should describe intent rather than implementation (e.g., use `retrieved_ids` instead of `lst2`) [1], [2].",
-          "issue": "low similarity (0.44) to source [1]",
+          "sentence": "Additionally, names should describe intent rather than implementation (for example, use `retrieved_ids` instead of `lst2`) [1], [2].",
+          "kind": "low_relevance",
           "cited_source_index": 1,
+          "score": -5.724508285522461,
+          "issue": "low relevance (-5.72) to source [1]",
           "cited_source_text": "# Ezitech Python Coding Standards **Document type:** Coding Standard **Owner:** Ezitech Engineering **Applies to:** All Python code in Ezitech and intern-built repositories. ## Naming conventions - **Variables and functions:** `snake_case` (e.g. `chunk_text`, `document_id`). - **Classes:** `PascalCase` (e.g. `GraphStore`, `DocumentChunk`). - **Constants:** `UPPER_SNAKE_CASE` (e.g. `MAX_CONFIDENCE`, `SOURCE_LOADERS`). - **Private/internal helpers:** prefix with a single underscore (e.g. `_chunk_embed_store`, `_populate_graph`). - Names should describe intent, not implementation \u2014 `retrieved_ids` not `lst2`. ## Type hints and docstrings - All public functions must have type hints on parameters and return values. - All public functions must have a docstring explaining *why*, not just *what* \u2014"
         },
         {
-          "sentence": "* **Descriptive naming:** Names should describe intent rather than implementation (e.g., use `retrieved_ids` instead of `lst2`) [1], [2].",
-          "issue": "low similarity (0.44) to source [2]",
+          "sentence": "Additionally, names should describe intent rather than implementation (for example, use `retrieved_ids` instead of `lst2`) [1], [2].",
+          "kind": "low_relevance",
           "cited_source_index": 2,
+          "score": -5.724508285522461,
+          "issue": "low relevance (-5.72) to source [2]",
           "cited_source_text": "# Ezitech Python Coding Standards **Document type:** Coding Standard **Owner:** Ezitech Engineering **Applies to:** All Python code in Ezitech and intern-built repositories. ## Naming conventions - **Variables and functions:** `snake_case` (e.g. `chunk_text`, `document_id`). - **Classes:** `PascalCase` (e.g. `GraphStore`, `DocumentChunk`). - **Constants:** `UPPER_SNAKE_CASE` (e.g. `MAX_CONFIDENCE`, `SOURCE_LOADERS`). - **Private/internal helpers:** prefix with a single underscore (e.g. `_chunk_embed_store`, `_populate_graph`). - Names should describe intent, not implementation \u2014 `retrieved_ids` not `lst2`. ## Type hints and docstrings - All public functions must have type hints on parameters and return values. - All public functions must have a docstring explaining *why*, not just *what* \u2014"
         }
       ]
@@ -67,44 +117,40 @@
     },
     {
       "query": "Does Ezitech require type hints and docstrings on all Python functions?",
-      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+      "answer": "Not on all functions:\n\n* **Public functions:** Both type hints (on parameters and return values) and docstrings (explaining *why*, not just *what*) are **required** [3], [4].\n* **Private/internal helpers:** Type hints are expected (\"should still have type hints\"), but docstrings are **encouraged rather than mandatory** if the function is short and the name is self-explanatory [3], [4].",
+      "num_sources_offered": 6,
+      "num_citations_in_answer": 2,
+      "verified": true,
+      "flags": []
     },
     {
       "query": "What is the SOP for onboarding a new mentor?",
-      "answer": "Based on the **SOP - Mentor Onboarding**, the procedure for onboarding a new mentor joining an active internship cohort is as follows [1], [2]:\n\n### **Purpose**\nTo define the steps a new mentor must complete before being assigned interns, ensuring consistent guidance across cohorts and a uniform onboarding experience for interns [1], [2].\n\n---\n\n### **Procedure**\n1. **Access Provisioning:** Engineering Enablement grants the mentor access to the LMS mentor dashboard, the shared case-study repository, and the mentor Slack channel within 1 business day of the mentor accepting the role [1], [2].\n2. **Shadow Session:** The new mentor shadows one full intern check-in conducted by an existing mentor before taking on their own interns [1], [2].\n3. **Case-Study Familiarization:** The mentor reads the case study packet(s) for their assigned track (e.g., AI-007) and passes a mentor quiz confirming their understanding of the evaluation criteria [1], [2].\n4. **First Assignment:** The mentor is initially assigned 1\u20132 interns, with the ability to scale up after a successful 2-week checkpoint review [1], [2].\n5. **Escalation Path Acknowledgement:** The mentor confirms they have read *SOP - Escalation Procedures* and understand who to contact if an intern is unresponsive or if a case study is at risk [1], [2].\n\n---\n\n### **Response-Time Expectations**\n* Mentors are expected to respond to intern check-ins within **48 hours** [1], [2].\n* If a mentor is unresponsive for more than 48 hours, the case should be escalated according to *SOP - Escalation Procedures*, routing first to the mentor's manager and then to Engineering Enablement if unresolved [1], [2].",
+      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+    },
+    {
+      "query": "What is the standard procedure for reporting a production incident?",
+      "answer": "According to the **SOP - Incident Response**, the standard procedure for reporting a production incident is as follows:\n\n1. **Post in Slack:** Post in the `#incidents` channel with the severity level, affected system, and a one-line summary [1], [2].\n2. **Open a Ticket:** Open an incident ticket using the incident template, specifying the severity, start time, current impact, and who is investigating [1], [2].\n3. **Page On-Call (if critical):** For **SEV-1** or **SEV-2** incidents, page the on-call engineer immediately without waiting for a ticket to be filed first [1], [2].",
       "num_sources_offered": 6,
       "num_citations_in_answer": 2,
       "verified": false,
       "flags": [
         {
-          "sentence": "---\n\n### **Response-Time Expectations**\n* Mentors are expected to respond to intern check-ins within **48 hours** [1], [2].",
-          "issue": "low similarity (0.54) to source [1]",
+          "sentence": "**Page On-Call (if critical):** For **SEV-1** or **SEV-2** incidents, page the on-call engineer immediately without waiting for a ticket to be filed first [1], [2].",
+          "kind": "low_relevance",
           "cited_source_index": 1,
-          "cited_source_text": "# SOP - Mentor Onboarding **Document type:** Standard Operating Procedure **Owner:** Ezitech Engineering Enablement **Applies to:** New mentors joining an active internship cohort ## Purpose Defines the steps a new mentor must complete before being assigned interns, so mentor guidance stays consistent across cohorts and interns get a uniform onboarding experience regardless of which mentor they're assigned. ## Procedure 1. **Access provisioning.** Engineering Enablement grants the mentor access to the LMS mentor dashboard, the shared case-study repository, and the mentor Slack channel within 1 business day of the mentor accepting the role. 2. **Shadow session.** The new mentor shadows one full intern check-in run by an existing mentor before taking on their own interns. 3. **Case-study fam"
+          "score": -0.31337928771972656,
+          "issue": "low relevance (-0.31) to source [1]",
+          "cited_source_text": "# SOP - Incident Response **Document type:** Standard Operating Procedure **Owner:** Ezitech Platform Engineering **Applies to:** Any production incident affecting an Ezitech product, including intern-built systems once they reach staging/production. ## Purpose A consistent process for reporting, triaging, and resolving production incidents so response time and communication don't depend on who happens to notice the problem first. ## Severity levels | Level | Definition | Initial response target | |-------|------------|--------------------------| | SEV-1 | Full outage or data loss affecting all users | 15 minutes | | SEV-2 | Major feature broken, partial outage | 1 hour | | SEV-3 | Degraded performance, workaround available | 4 hours | | SEV-4 | Minor bug, no user-facing impact yet | Next "
         },
         {
-          "sentence": "---\n\n### **Response-Time Expectations**\n* Mentors are expected to respond to intern check-ins within **48 hours** [1], [2].",
-          "issue": "low similarity (0.54) to source [2]",
+          "sentence": "**Page On-Call (if critical):** For **SEV-1** or **SEV-2** incidents, page the on-call engineer immediately without waiting for a ticket to be filed first [1], [2].",
+          "kind": "low_relevance",
           "cited_source_index": 2,
-          "cited_source_text": "# SOP - Mentor Onboarding **Document type:** Standard Operating Procedure **Owner:** Ezitech Engineering Enablement **Applies to:** New mentors joining an active internship cohort ## Purpose Defines the steps a new mentor must complete before being assigned interns, so mentor guidance stays consistent across cohorts and interns get a uniform onboarding experience regardless of which mentor they're assigned. ## Procedure 1. **Access provisioning.** Engineering Enablement grants the mentor access to the LMS mentor dashboard, the shared case-study repository, and the mentor Slack channel within 1 business day of the mentor accepting the role. 2. **Shadow session.** The new mentor shadows one full intern check-in run by an existing mentor before taking on their own interns. 3. **Case-study fam"
-        },
-        {
-          "sentence": "* If a mentor is unresponsive for more than 48 hours, the case should be escalated according to *SOP - Escalation Procedures*, routing first to the mentor's manager and then to Engineering Enablement if unresolved [1], [2].",
-          "issue": "low similarity (0.49) to source [1]",
-          "cited_source_index": 1,
-          "cited_source_text": "# SOP - Mentor Onboarding **Document type:** Standard Operating Procedure **Owner:** Ezitech Engineering Enablement **Applies to:** New mentors joining an active internship cohort ## Purpose Defines the steps a new mentor must complete before being assigned interns, so mentor guidance stays consistent across cohorts and interns get a uniform onboarding experience regardless of which mentor they're assigned. ## Procedure 1. **Access provisioning.** Engineering Enablement grants the mentor access to the LMS mentor dashboard, the shared case-study repository, and the mentor Slack channel within 1 business day of the mentor accepting the role. 2. **Shadow session.** The new mentor shadows one full intern check-in run by an existing mentor before taking on their own interns. 3. **Case-study fam"
-        },
-        {
-          "sentence": "* If a mentor is unresponsive for more than 48 hours, the case should be escalated according to *SOP - Escalation Procedures*, routing first to the mentor's manager and then to Engineering Enablement if unresolved [1], [2].",
-          "issue": "low similarity (0.49) to source [2]",
-          "cited_source_index": 2,
-          "cited_source_text": "# SOP - Mentor Onboarding **Document type:** Standard Operating Procedure **Owner:** Ezitech Engineering Enablement **Applies to:** New mentors joining an active internship cohort ## Purpose Defines the steps a new mentor must complete before being assigned interns, so mentor guidance stays consistent across cohorts and interns get a uniform onboarding experience regardless of which mentor they're assigned. ## Procedure 1. **Access provisioning.** Engineering Enablement grants the mentor access to the LMS mentor dashboard, the shared case-study repository, and the mentor Slack channel within 1 business day of the mentor accepting the role. 2. **Shadow session.** The new mentor shadows one full intern check-in run by an existing mentor before taking on their own interns. 3. **Case-study fam"
+          "score": -0.31337928771972656,
+          "issue": "low relevance (-0.31) to source [2]",
+          "cited_source_text": "# SOP - Incident Response **Document type:** Standard Operating Procedure **Owner:** Ezitech Platform Engineering **Applies to:** Any production incident affecting an Ezitech product, including intern-built systems once they reach staging/production. ## Purpose A consistent process for reporting, triaging, and resolving production incidents so response time and communication don't depend on who happens to notice the problem first. ## Severity levels | Level | Definition | Initial response target | |-------|------------|--------------------------| | SEV-1 | Full outage or data loss affecting all users | 15 minutes | | SEV-2 | Major feature broken, partial outage | 1 hour | | SEV-3 | Degraded performance, workaround available | 4 hours | | SEV-4 | Minor bug, no user-facing impact yet | Next "
         }
       ]
-    },
-    {
-      "query": "What is the standard procedure for reporting a production incident?",
-      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
     },
     {
       "query": "How should an intern request access to internal repositories and tools?",
@@ -116,7 +162,68 @@
     },
     {
       "query": "How is the ingestion pipeline structured in the EKIE repository?",
-      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+      "answer": "Based on the provided documentation, the ingestion pipeline in the EKIE repository is structured as follows:\n\n### 1. Codebase & Directory Layout\n* **`app/ingestion/`**: Contains the source loaders, OCR fallback handling, and chunking logic [3].\n* **`app/embeddings/`**: Manages the embedding model wrapper (using `sentence-transformers`) and ChromaDB vector store operations [3].\n* **`app/graph/`**: Handles entity and relationship extraction (using `spaCy`) and Neo4j read/write operations [3].\n* **`app.ingestion.pipeline.ingest_document`**: Serves as the main entry point executing the full ingestion pipeline for uploaded or seeded documents [2, 5].\n\n### 2. Execution Flow & Lifecycle\nWhen a document is uploaded (e.g., via `POST /admin/documents/upload` or seeded via the evaluation scripts), the ingestion process executes synchronously through the following stages before returning [3, 5]:\n1. **Loading**: Document text is extracted using source-type-specific loaders (or OCR fallback if needed) [3]. Supported source types include markdown, code, transcripts, meeting notes, blogs, API docs, DB schemas, LMS HTML, docx, and GitHub repositories [2].\n2. **Chunking**: The extracted text is split into chunks (e.g., via `chunk_text`) [2, 3].\n3. **Embedding**: Embeddings are generated for the chunks using `sentence-transformers` [3].\n4. **Vector Store Upsert**: Embeddings are stored in the ChromaDB vector database [3].\n5. **Relational DB Storage**: Document chunk records (`DocumentChunk` rows) are written to PostgreSQL [2, 3].\n6. **Knowledge Graph Population**: Entities and relationships are extracted (via `spaCy`) and populated into the Neo4j graph database [3].\n\n### 3. Post-Ingestion Status & Availability\n* Once ingestion completes, the document status is marked as `\"pending\"` for admin review [1, 3].\n* Ingestion is completely finished at upload time; documents are indexed and immediately searchable via keyword, semantic, and RAG search without waiting for admin approval [3].",
+      "num_sources_offered": 6,
+      "num_citations_in_answer": 2,
+      "verified": false,
+      "flags": [
+        {
+          "sentence": "Codebase & Directory Layout\n* **`app/ingestion/`**: Contains the source loaders, OCR fallback handling, and chunking logic [3].",
+          "kind": "low_relevance",
+          "cited_source_index": 3,
+          "score": -2.1399543285369873,
+          "issue": "low relevance (-2.14) to source [3]",
+          "cited_source_text": "# Enterprise Knowledge Intelligence Engine (EKIE) Ezitech AI-007 case study \u2014 central AI intelligence layer over organizational knowledge. ## Architecture ``` Ingestion (loaders + OCR + chunking) v Embedding pipeline (sentence-transformers) -> ChromaDB (vector store) v Entity/relationship extraction (spaCy) -> Neo4j (knowledge graph) v Search layer: semantic | keyword (Postgres FTS) | hybrid (RRF + cross-encoder rerank) | metadata | context-aware v RAG answer generation (Google Gemini, free tier) + citation verification v Intelligence layer: duplicate detection, staleness detection, gap detection, comparison, summarization, ranking v Admin layer: upload/approve/categories/analytics/quality (FastAPI + Postgres) v Evaluation: precision/recall/MRR against a labeled query set, tracked in MLflo"
+        },
+        {
+          "sentence": "* **`app/embeddings/`**: Manages the embedding model wrapper (using `sentence-transformers`) and ChromaDB vector store operations [3].",
+          "kind": "low_relevance",
+          "cited_source_index": 3,
+          "score": -3.649491310119629,
+          "issue": "low relevance (-3.65) to source [3]",
+          "cited_source_text": "# Enterprise Knowledge Intelligence Engine (EKIE) Ezitech AI-007 case study \u2014 central AI intelligence layer over organizational knowledge. ## Architecture ``` Ingestion (loaders + OCR + chunking) v Embedding pipeline (sentence-transformers) -> ChromaDB (vector store) v Entity/relationship extraction (spaCy) -> Neo4j (knowledge graph) v Search layer: semantic | keyword (Postgres FTS) | hybrid (RRF + cross-encoder rerank) | metadata | context-aware v RAG answer generation (Google Gemini, free tier) + citation verification v Intelligence layer: duplicate detection, staleness detection, gap detection, comparison, summarization, ranking v Admin layer: upload/approve/categories/analytics/quality (FastAPI + Postgres) v Evaluation: precision/recall/MRR against a labeled query set, tracked in MLflo"
+        },
+        {
+          "sentence": "**Loading**: Document text is extracted using source-type-specific loaders (or OCR fallback if needed) [3].",
+          "kind": "low_relevance",
+          "cited_source_index": 3,
+          "score": -4.595598220825195,
+          "issue": "low relevance (-4.60) to source [3]",
+          "cited_source_text": "# Enterprise Knowledge Intelligence Engine (EKIE) Ezitech AI-007 case study \u2014 central AI intelligence layer over organizational knowledge. ## Architecture ``` Ingestion (loaders + OCR + chunking) v Embedding pipeline (sentence-transformers) -> ChromaDB (vector store) v Entity/relationship extraction (spaCy) -> Neo4j (knowledge graph) v Search layer: semantic | keyword (Postgres FTS) | hybrid (RRF + cross-encoder rerank) | metadata | context-aware v RAG answer generation (Google Gemini, free tier) + citation verification v Intelligence layer: duplicate detection, staleness detection, gap detection, comparison, summarization, ranking v Admin layer: upload/approve/categories/analytics/quality (FastAPI + Postgres) v Evaluation: precision/recall/MRR against a labeled query set, tracked in MLflo"
+        },
+        {
+          "sentence": "Supported source types include markdown, code, transcripts, meeting notes, blogs, API docs, DB schemas, LMS HTML, docx, and GitHub repositories [2].",
+          "kind": "low_relevance",
+          "cited_source_index": 2,
+          "score": -4.427124500274658,
+          "issue": "low relevance (-4.43) to source [2]",
+          "cited_source_text": "\"\"\" Integration tests: for every knowledge source type, run the REAL loader on a small generated fixture, chunk it with the REAL chunker, store it via a REAL Postgres write, and confirm keyword_search() finds a unique marker word planted in that source's content. This is deliberately narrower than the full ingestion pipeline (app.ingestion.pipeline.ingest_document): it skips embeddings/ChromaDB and Neo4j graph population, which need API credentials / a running Neo4j instance and aren't what this suite is checking. What's under test here is specifically \"does keyword search work against everything the loaders produce\" \u2014 the same question the manual terminal session answered once, by hand, non-repeatably. This makes that check automated and run on every test invocation instead. Requires a re"
+        },
+        {
+          "sentence": "**Embedding**: Embeddings are generated for the chunks using `sentence-transformers` [3].",
+          "kind": "low_relevance",
+          "cited_source_index": 3,
+          "score": -0.6423766613006592,
+          "issue": "low relevance (-0.64) to source [3]",
+          "cited_source_text": "# Enterprise Knowledge Intelligence Engine (EKIE) Ezitech AI-007 case study \u2014 central AI intelligence layer over organizational knowledge. ## Architecture ``` Ingestion (loaders + OCR + chunking) v Embedding pipeline (sentence-transformers) -> ChromaDB (vector store) v Entity/relationship extraction (spaCy) -> Neo4j (knowledge graph) v Search layer: semantic | keyword (Postgres FTS) | hybrid (RRF + cross-encoder rerank) | metadata | context-aware v RAG answer generation (Google Gemini, free tier) + citation verification v Intelligence layer: duplicate detection, staleness detection, gap detection, comparison, summarization, ranking v Admin layer: upload/approve/categories/analytics/quality (FastAPI + Postgres) v Evaluation: precision/recall/MRR against a labeled query set, tracked in MLflo"
+        },
+        {
+          "sentence": "**Vector Store Upsert**: Embeddings are stored in the ChromaDB vector database [3].",
+          "kind": "low_relevance",
+          "cited_source_index": 3,
+          "score": -0.14054428040981293,
+          "issue": "low relevance (-0.14) to source [3]",
+          "cited_source_text": "# Enterprise Knowledge Intelligence Engine (EKIE) Ezitech AI-007 case study \u2014 central AI intelligence layer over organizational knowledge. ## Architecture ``` Ingestion (loaders + OCR + chunking) v Embedding pipeline (sentence-transformers) -> ChromaDB (vector store) v Entity/relationship extraction (spaCy) -> Neo4j (knowledge graph) v Search layer: semantic | keyword (Postgres FTS) | hybrid (RRF + cross-encoder rerank) | metadata | context-aware v RAG answer generation (Google Gemini, free tier) + citation verification v Intelligence layer: duplicate detection, staleness detection, gap detection, comparison, summarization, ranking v Admin layer: upload/approve/categories/analytics/quality (FastAPI + Postgres) v Evaluation: precision/recall/MRR against a labeled query set, tracked in MLflo"
+        },
+        {
+          "sentence": "* Ingestion is completely finished at upload time; documents are indexed and immediately searchable via keyword, semantic, and RAG search without waiting for admin approval [3].",
+          "kind": "low_relevance",
+          "cited_source_index": 3,
+          "score": -3.1158783435821533,
+          "issue": "low relevance (-3.12) to source [3]",
+          "cited_source_text": "# Enterprise Knowledge Intelligence Engine (EKIE) Ezitech AI-007 case study \u2014 central AI intelligence layer over organizational knowledge. ## Architecture ``` Ingestion (loaders + OCR + chunking) v Embedding pipeline (sentence-transformers) -> ChromaDB (vector store) v Entity/relationship extraction (spaCy) -> Neo4j (knowledge graph) v Search layer: semantic | keyword (Postgres FTS) | hybrid (RRF + cross-encoder rerank) | metadata | context-aware v RAG answer generation (Google Gemini, free tier) + citation verification v Intelligence layer: duplicate detection, staleness detection, gap detection, comparison, summarization, ranking v Admin layer: upload/approve/categories/analytics/quality (FastAPI + Postgres) v Evaluation: precision/recall/MRR against a labeled query set, tracked in MLflo"
+        }
+      ]
     },
     {
       "query": "Where is entity and relationship extraction implemented for the knowledge graph?",
@@ -128,11 +235,15 @@
     },
     {
       "query": "Where are the FastAPI routes for the knowledge platform defined?",
-      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+      "answer": "Based on the provided sources, the FastAPI routes are defined across modular router files and mounted in the main application:\n\n* **Knowledge routes (`knowledge_router`):** Defined in `app.api.routes` (handling search and RAG endpoints) [1, 2].\n* **Admin routes (`admin_router`):** Defined in `app.admin.routes` (handling document upload, approvals, categories, analytics, and quality endpoints) [1, 2, 5].\n\nBoth routers are included in the main FastAPI application under the prefix `/api/v1` [2, 5]. Additionally, top-level routes such as `GET /health` and the Prometheus metrics mount (`/metrics`) are registered directly on the main application (`app/main.py`) [2, 5].",
+      "num_sources_offered": 6,
+      "num_citations_in_answer": 0,
+      "verified": true,
+      "flags": []
     },
     {
       "query": "What request body does the POST /ask endpoint expect?",
-      "answer": "Based on the provided sources, the exact request body expected by the `POST /ask` endpoint is not mentioned.",
+      "answer": "The provided sources do not contain information about the request body expected by the `POST /ask` endpoint.",
       "num_sources_offered": 6,
       "num_citations_in_answer": 0,
       "verified": true,
@@ -140,18 +251,7 @@
     },
     {
       "query": "What parameters does the /search/hybrid endpoint accept?",
-      "answer": "Based on the provided sources, the `/api/v1/search/hybrid` endpoint accepts the following query parameters:\n\n- **`q`** [query] (required) [1]\n- **`top_k`** [query] [1]\n- **`category_filter`** [query] [1]\n- **`use_reranker`** [query] (controls cross-encoder reranking) [2]\n- **`rerank_pool_size`** [query] (specifies the candidate pool size for reranking) [2, 4]",
-      "num_sources_offered": 6,
-      "num_citations_in_answer": 2,
-      "verified": false,
-      "flags": [
-        {
-          "sentence": "Based on the provided sources, the `/api/v1/search/hybrid` endpoint accepts the following query parameters:\n\n- **`q`** [query] (required) [1]\n- **`top_k`** [query] [1]\n- **`category_filter`** [query] [1]\n- **`use_reranker`** [query] (controls cross-encoder reranking) [2]\n- **`rerank_pool_size`** [query] (specifies the candidate pool size for reranking) [2, 4]",
-          "issue": "low similarity (0.50) to source [2]",
-          "cited_source_index": 2,
-          "cited_source_text": "a stuck processing state.** It isn't \u2014 ingestion is fully synchronous (see \"Document lifecycle\" above) and `status` only tracks admin review. Documented explicitly in the upload/approve endpoint descriptions (visible in `/docs`) and in this README, including the fact that unapproved documents are currently still searchable (flagged as a deliberate not-changed-here item, not silently \"fixed\" by adding a filter that would change existing behavior). - **`hybrid_search()` had no reranking stage** \u2014 RRF fusion alone (bi-encoder cosine similarity + BM25-style `ts_rank`) scores the query and each chunk independently, which misses things like word order and negation. Added `app/search/rerank.py`: a `cross-encoder/ms-marco-MiniLM-L-6-v2` cross-encoder (already covered by the existing `sentence-tran"
-        }
-      ]
+      "error": "503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
     },
     {
       "query": "What HTTP status code does the document summary endpoint return for a missing document?",

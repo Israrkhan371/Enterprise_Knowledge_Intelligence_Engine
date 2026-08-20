@@ -51,7 +51,6 @@ mixed into the same run's metric set).
 import argparse
 import json
 import logging
-import re
 import sys
 from collections import Counter
 from pathlib import Path
@@ -78,34 +77,35 @@ logger = logging.getLogger(__name__)
 RESULTS_PATH = Path(__file__).resolve().parent.parent / "docs" / "citation_accuracy_results.json"
 
 
-def _flag_category(issue: str) -> str:
-    # verify_citations()'s flags are free-text (f"...{idx}...") — bucket
-    # them by the two distinct failure modes it actually produces, so the
-    # summary can report a breakdown instead of a wall of unique strings.
-    if "no matching source" in issue:
-        return "citation_number_not_in_sources"
-    if "low similarity" in issue:
-        return "claim_not_supported_by_cited_source"
-    return "other"
-
-
-_CITED_INDEX_RE = re.compile(r"source \[(\d+)\]")
+def _flag_category(flag: dict) -> str:
+    # verify_citations() now emits a machine-readable "kind" field on every
+    # flag specifically so this doesn't need to substring-match the
+    # human-readable "issue" text - that's exactly what broke silently
+    # after citation_check.py's wording changed from "low similarity" to
+    # "low relevance" during the cross-encoder rewrite (2026-08-19): this
+    # function and inspect_citation_flags.py's filter both hardcoded the
+    # old string, so every flag fell through into "other" or got filtered
+    # out entirely, with no error - just wrong/empty numbers. Reading
+    # "kind" instead makes that class of bug impossible: any future
+    # wording change to "issue" simply can't affect categorization.
+    return {
+        "no_matching_source": "citation_number_not_in_sources",
+        "low_relevance": "claim_not_supported_by_cited_source",
+    }.get(flag.get("kind"), "other")
 
 
 def _enrich_flags(flags: list[dict], sources: list[dict]) -> list[dict]:
-    # verify_citations() reports the flagged sentence and a similarity
-    # score, but not what the cited source actually says — so judging
-    # "does the source support this claim" means separately looking the
-    # source back up. Attach it here so the results file is self-contained
-    # for exactly that check, without needing another live /ask call.
+    # verify_citations() reports which source was cited (cited_source_index)
+    # but not what that source actually says - so judging "does the source
+    # support this claim" means separately looking the source back up.
+    # Attach the full text here so the results file is self-contained for
+    # exactly that check, without needing another live /ask call.
     by_index = {s["index"]: s.get("text", "") for s in sources}
     enriched = []
     for flag in flags:
-        match = _CITED_INDEX_RE.search(flag["issue"])
-        cited_index = int(match.group(1)) if match else None
+        cited_index = flag.get("cited_source_index")
         enriched.append({
             **flag,
-            "cited_source_index": cited_index,
             "cited_source_text": by_index.get(cited_index, "")[:800] if cited_index is not None else "",
         })
     return enriched
@@ -171,7 +171,7 @@ def run(k: int = 6, offset: int = 0, limit: int | None = None) -> dict:
     cited_and_verified = [q for q in cited if q["verified"]]
 
     all_flags = [f for q in scored for f in q["flags"]]
-    flag_breakdown = Counter(_flag_category(f["issue"]) for f in all_flags)
+    flag_breakdown = Counter(_flag_category(f) for f in all_flags)
 
     summary = {
         "num_queries_in_full_eval_set": len(full_eval_set),

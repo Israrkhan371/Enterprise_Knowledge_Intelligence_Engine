@@ -708,13 +708,18 @@ ingested document are skipped (and counted in the `skipped` field of the
 docstring on `run_evaluation()`.
 
 **Citation accuracy** (a separate question from retrieval accuracy — does
-the *generated answer* correctly cite what it retrieved?) is evaluated by
-`scripts/check_citation_accuracy.py` over the same 40-query set. See
-[docs/evaluation_report.md](docs/evaluation_report.md) for methodology,
-current results (13/40 queries scored as of Aug 19, still in progress),
-and how to run it — note the free-tier Gemini quota (20 requests/day/model)
-means this typically takes several `--offset`/`--limit` runs across
-multiple days to cover the full set.
+the *generated answer* correctly cite what it retrieved?) was
+investigated via `scripts/check_citation_accuracy.py` and
+`scripts/inspect_citation_flags.py` over the same 40-query set. This
+track is **closed with a negative finding, not a passing metric**: two
+independent automated scoring approaches (bi-encoder cosine similarity,
+then a cross-encoder relevance rewrite) were built, tested, and manually
+validated against real flagged citations — neither produces a threshold
+that reliably separates unsupported claims from accurate ones. See
+[docs/evaluation_report.md](docs/evaluation_report.md) § 3 for the full
+investigation, the manual validation table, and recommended follow-up
+approaches (span-targeted comparison or LLM-as-judge entailment) that
+weren't in this cycle's scope.
 
 ## Known flaws fixed in this pass
 

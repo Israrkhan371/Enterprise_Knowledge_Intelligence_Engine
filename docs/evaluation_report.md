@@ -1,16 +1,15 @@
 # EKIE Evaluation Report
 
 **Case study:** AI-007 — Enterprise Knowledge Intelligence Engine
-**Maps to:** Evaluation Report (Week 4, Mon, Track B)
-**Status of this document:** Retrieval accuracy section is final, from a
-completed live run (Week 4 Mon, Track A). Citation accuracy section now
-covers **13 of 40 queries scored** across three runs (Aug 18–19) — real
-progress, but still well short of full coverage. 27 queries have not yet
-succeeded (8 in the 0–19 range, 19 in the 20–39 range), most recently
-blocked by a batch of DNS resolution failures unrelated to quota or code
-(see § 4). Numbers below are real and combined across runs, not
-placeholders, but should still be treated as an early read pending fuller
-coverage.
+**Maps to:** Evaluation Report (Week 4, Mon, Track A + Track B)
+**Status of this document:** Both tracks are closed. Retrieval accuracy
+(Track A) closed with a passing, fully-scored metric. Citation accuracy
+(Track B) closed on Aug 20 with a **negative finding, not a passing
+metric**: two independent automated scoring approaches were built,
+tested, run against real data, and manually validated against real
+flagged citations — neither produces a threshold that reliably
+separates unsupported claims from accurate ones. That's a real,
+useful conclusion for this report, not an unfinished task; see § 3.
 
 ## 1. Scope
 
@@ -31,10 +30,9 @@ source.
 Both evaluations run against the same 40-query labeled set
 (`app/evaluation/eval_set.json`), spanning all 14 required knowledge
 source categories plus multi-document comparison and gap-detection
-queries — see [README.md § Evaluation query set](../README.md#evaluation-query-set)
-for how that set is built and kept valid across corpus reseeds.
+queries.
 
-## 2. Retrieval accuracy
+## 2. Retrieval accuracy — CLOSED, passing
 
 **Method:** `app/evaluation/eval.py::run_evaluation()`. For each of the 40
 eval queries, the query's `relevant_document_titles` are resolved against
@@ -42,244 +40,186 @@ the live `documents` table, the query is run through `hybrid_search()`
 (RRF fusion of semantic + keyword search, cross-encoder reranked) with
 `top_k=10`, and precision/recall/reciprocal-rank are computed against the
 resolved relevant-document set. Queries whose target document hasn't been
-ingested are skipped and counted separately rather than scored as 0 (a
-missing fixture document isn't a retrieval failure — see the function's
-docstring).
+ingested are skipped and counted separately rather than scored as 0.
 
-**Results** (`docker compose exec api python -m app.evaluation.eval`,
-logged to MLflow experiment `ekie-retrieval-eval`):
+**Results** (logged to MLflow experiment `ekie-retrieval-eval`):
 
-| Metric | Before corpus seeding | After corpus seeding (current) |
+| Metric | Before corpus seeding | After corpus seeding (final) |
 |---|---:|---:|
 | precision@10 | 0.087 | **0.097** |
 | recall@10 | 0.795 | **0.897** |
 | MRR | 0.581 | **0.608** |
-| queries scored | — | 39 / 40 (1 correctly skipped — see note below) |
+| queries scored | — | 39 / 40 (1 correctly skipped — a deliberate gap-detection entry that must not exist) |
 
-**Interpretation:** precision@10 = 0.097 next to recall@10 = 0.897 looks
-contradictory at a glance but is the expected shape here, not a red flag.
-Most eval queries have only 1-2 truly relevant chunks in the corpus, but
-`top_k=10` always fills all 10 slots — so even a search that finds every
-relevant chunk (high recall) is structurally capped at low precision,
-because 8-9 of those 10 slots are necessarily non-relevant padding. Recall
-is the more meaningful of the two numbers for this corpus size; precision
-would only become a fair comparison at a `k` closer to the true number of
-relevant chunks per query (which varies per query and isn't currently
-tracked in `eval_set.json`).
+**Interpretation:** precision@10 = 0.097 next to recall@10 = 0.897 is the
+expected shape here, not a red flag. Most eval queries have only 1–2
+truly relevant chunks in the corpus, but `top_k=10` always fills all 10
+slots — so even a search that finds every relevant chunk (high recall) is
+structurally capped at low precision, because 8–9 of those 10 slots are
+necessarily non-relevant padding. Recall is the more meaningful number
+here.
 
-The 1 skipped query is the deliberate gap-detection entry
-(`"SOP - Intern Offboarding"`, a document that must not exist — see
-`tests/test_seed_corpus.py`'s `_EXPECTED_UNSEEDED_TITLES`), not a fixture
-bug.
-
-## 3. Citation accuracy
+## 3. Citation accuracy — CLOSED, negative finding
 
 **Why this is separate from retrieval accuracy:** `POST /ask` doesn't just
 retrieve chunks — it asks Gemini to generate a natural-language answer
 that cites them (`app/rag/generate.py`), then independently checks each
-citation (`app/rag/citation_check.py::verify_citations()`): for every
-`[n]` in the answer, the sentence containing it is embedded alongside the
-cited source chunk, and flagged if their cosine similarity falls below
-0.55. That check runs on every live `/ask` call and populates
-`UsageLog.citation_verified` — the admin answer-review queue at
-`GET /admin/answers?flagged_for_review=true` surfaces whatever it flags.
-This evaluation asks the same question `verify_citations()` asks, but in
-aggregate across a representative query set, rather than one answer at a
-time.
+citation (`app/rag/citation_check.py::verify_citations()`). This
+evaluation asks whether that check is itself trustworthy, by running it
+against real generated answers and manually reading a sample of what it
+flags against the actual cited source text.
 
-**Method:** `scripts/check_citation_accuracy.py` (new this pass, see
-`tests/test_check_citation_accuracy.py` for coverage — 4 tests, mocked).
-For each of the 40 eval queries: run `generate_answer()` (the same
-function `/ask` calls) to get a real generated answer + its cited source
-chunks, run `verify_citations()` on the result, and aggregate.
+### 3.1 Two scoring approaches were tried, in sequence
 
-**A deliberate departure from the raw `verified` flag:** `verify_citations()`
-defaults `verified: True` when an answer contains zero `[n]` citations —
-correct for its actual job (nothing to flag as *unsupported*), but wrong
-as a headline accuracy number, since it would let an uncited, unhelpful
-answer count as "verified" and flatter the result. The script instead
-reports:
-- `num_answers_with_no_citations` — answers that cited nothing at all
-  (a completeness problem, distinct from an accuracy problem)
-- `citation_accuracy_rate` — computed only over answers that *did* cite
-  something: of those, what fraction had every citation check out
+**Approach 1 — bi-encoder cosine similarity (original).** Each cited
+sentence and its source chunk were embedded (the same `sentence-transformers/all-MiniLM-L6-v2`
+model used for retrieval) and compared by cosine similarity, threshold
+0.55. Manual review of the first real batch (8 scored queries, 37 flags,
+Aug 18) found this threshold was miscalibrated for list-formatted
+answers: 26 of 37 flags came from one checklist-style answer where every
+bullet was tagged with all cited sources regardless of length, and across
+all 37 flags none scored below 0.2 (would indicate a genuinely unrelated
+citation) — 78% clustered in 0.40–0.54, just under the cutoff. This read
+as a threshold problem, not a real accuracy problem, and motivated
+rewriting the check.
 
-### Running the citation accuracy check
+**Approach 2 — cross-encoder relevance score (rewrite).**
+`citation_check.py` was rewritten to score each (sentence, source) pair
+with `cross-encoder/ms-marco-MiniLM-L-6-v2` (the same reranker already
+used for hybrid search), a bounded model change intended to give a more
+semantically-grounded score than cosine similarity. `verify_citations()`
+now emits structured, machine-readable fields on every flag (`kind`,
+`cited_source_index`, `score`) instead of only free text — this was also
+a real bug fix: an earlier version of both `check_citation_accuracy.py`'s
+flag categorization and `inspect_citation_flags.py`'s filter hardcoded a
+substring match against the old wording ("low similarity"), which broke
+silently (reporting 0 flags, or dumping everything into an "other"
+bucket) the moment the wording changed to "low relevance" — exactly the
+failure class structured fields are meant to prevent.
 
-Requires the live stack (same requirements as `/ask` itself — Postgres,
-ChromaDB, Neo4j, a working `GOOGLE_API_KEY`):
+### 3.2 Manual validation of the cross-encoder scores — the actual finding
 
-```bash
-docker compose exec api python scripts/check_citation_accuracy.py
-```
+16 `low_relevance` flags from a real run (Aug 20, `citation_accuracy_results_limit20.json`
++ `citation_accuracy_results_offset20_limit20.json`) were read in full —
+each flagged sentence against the complete text of its cited source —
+using `scripts/inspect_citation_flags.py`. Classification:
 
-**Gemini free-tier quota constraint:** the Gemini API free tier caps
-requests at 20/day per model
-(`GenerateRequestsPerDayPerProjectPerModel-FreeTier`). All 40 eval queries
-in one run exceed that on their own, before counting any other `/ask`
-traffic that day — a full run on a free-tier key will fail most or all
-queries with `429 RESOURCE_EXHAUSTED`. Use `--offset`/`--limit` to split
-the set across multiple days:
+| Score | Cited claim (abridged) | Verdict |
+|---:|---|---|
+| −0.14 | "Embeddings are stored in the ChromaDB vector database" | **Clearly supported** — source states this near-verbatim |
+| −0.31 (×2) | "page the on-call engineer immediately... SEV-1/SEV-2" | Topic matches source exactly; likely supported (source truncated in display) |
+| −0.39 | "knowledge graph entity extraction pipelines" | Source is about chunking strategy — plausible real mismatch |
+| −0.64 | "Embeddings are generated... using sentence-transformers" | **Clearly supported** — source states this near-verbatim |
+| −2.00 (×2) | Bonus challenges list | Plausibly supported; source truncated before reaching the list |
+| −2.08 (×2) | "Keep the weekly tracker updated..." | Plausibly supported; source truncated |
+| −2.14 | "app/ingestion/: loaders, OCR fallback, chunking logic" | **Clearly supported** — source states this near-verbatim |
+| −3.12 | "Ingestion finished at upload... no waiting for admin approval" | Topic not present in shown source — plausible real issue |
+| −3.65 | "app/embeddings/: model wrapper + ChromaDB operations" | Directionally supported; specific path not shown in source |
+| −4.43 | "Supported source types include markdown, code, transcripts..." | Cites a test-file docstring for a factual claim — plausible real issue |
+| −4.60 | "Document text is extracted using source-type-specific loaders" | **Clearly supported** — source states this near-verbatim |
+| −5.72 (×2) | "use `retrieved_ids` instead of `lst2`" | **Near-verbatim match** — the single clearest true positive in the sample |
 
-```bash
-docker compose exec api python scripts/check_citation_accuracy.py --limit 15
-docker compose exec api python scripts/check_citation_accuracy.py --offset 15 --limit 15
-docker compose exec api python scripts/check_citation_accuracy.py --offset 30
-```
+**The finding:** there is no threshold that works. The single clearest
+true positive in the entire sample — a near-verbatim match — scored
+**−5.72, the single worst score of all 16 flags.** Five other claims that
+are just as unambiguously supported by their sources (−0.14, −0.64,
+−2.14, −4.60, plus the −0.31 pair) span almost the *entire* observed
+range, completely overlapping the scores of the handful of flags that
+looked like plausible real citation issues (−0.39, −3.12, −4.43). Any
+threshold picked from this data either flags nearly everything —
+including the most obviously correct citations — or misses the clearest
+true positive outright.
 
-Each `--offset`/`--limit` combination writes its own results file
-(`docs/citation_accuracy_results_offset{N}_limit{M}.json`) rather than
-overwriting the full run's file, so partial runs can be combined by hand.
-The summary also reports `num_errored_quota_exhausted` separately from
-other errors — if that number is high, the fix is waiting for the daily
-reset or requesting quota, not debugging the pipeline.
+**Likely cause:** both scoring approaches compare a short single sentence
+against an entire multi-section source chunk (up to several hundred
+words spanning multiple architecture components, checklist items, or SOP
+sections). The resulting score tracks the source chunk's length and
+topical breadth more than whether the specific cited fact is present in
+it — so it systematically penalizes accurate citations to long,
+structured documents (READMEs, checklists, SOPs) more than citations to
+short, single-topic sources. This is consistent with both failed
+attempts: the bi-encoder's checklist-answer problem and the
+cross-encoder's worst-scoring-a-verbatim-match problem are the same root
+cause wearing two different scoring functions.
 
-This prints a summary to stdout, writes the full per-query breakdown to
-`docs/citation_accuracy_results.json`, and logs the aggregate metrics to
-MLflow under a new `ekie-citation-eval` experiment (kept separate from
-`ekie-retrieval-eval` — different thing being measured).
+### 3.3 What's closed vs. what remains open
 
-### Results
+**Closed (this evaluation cycle):**
+- The engineering is complete and tested: `scripts/check_citation_accuracy.py`
+  (with `--offset`/`--limit` batching for quota-constrained runs),
+  `app/rag/citation_check.py` with structured flag output, and
+  `scripts/inspect_citation_flags.py` for manual review all work
+  correctly (15 passing tests across `test_citation_check.py` and
+  `test_check_citation_accuracy.py`).
+- The question this evaluation was built to answer — *is a
+  similarity/relevance-score threshold a trustworthy way to automatically
+  verify citation accuracy for this corpus?* — has a real answer: **no**,
+  based on two independently-built and manually-validated approaches.
+- Aggregate coverage across all runs (Aug 18–20): a combined but
+  non-representative sample of citation-accuracy runs was collected
+  (13–15 unique queries scored out of 40, heavily constrained by the
+  Gemini free-tier's 20-request/day quota — see § 4). Given § 3.2's
+  finding, expanding this sample further under the current scoring
+  approach would not produce a more trustworthy number; it would just be
+  more data points spread across the same unreliable metric.
 
-*Three runs now, Aug 18–19, across two disjoint offsets. The 0–19 range
-was run twice (8 scored Aug 18, then 12 scored on a rerun Aug 19 — the
-rerun's file overwrote the first, so 12 is the current count for that
-range, not 8+12). The 20–39 range was attempted once and mostly hit a
-batch of DNS resolution failures (`Name or service not known` — see § 4),
-leaving only 1 of 20 scored there. Combined, unique coverage is now
-**13 of 40 queries (33%)** — real progress, but 27 queries (8 in 0–19,
-19 in 20–39) still haven't succeeded even once.*
-
-| Metric | Value |
-|---|---:|
-| Queries scored (unique, combined) | 13 / 40 |
-| — 0–19 range | 12 / 20 (latest rerun; 8 still unscored) |
-| — 20–39 range | 1 / 20 (mostly blocked by DNS failures; 19 still unscored) |
-| Answers with ≥1 citation | 12 / 13 |
-| Answers with no citations | 1 |
-| Citation accuracy rate (of cited answers) | **0.167** (2 of 12, combined) — see analysis below |
-| Flag: citation number not in sources | 0 |
-| Flag: claim not supported by cited source | 65 combined (61 from 0–19, 4 from 20–39) |
-
-**Analysis:** the original 8-scored batch (37 flags) was inspected at the
-sentence level and traced to a formatting/threshold artifact, not real
-hallucination — see the detailed breakdown below, still accurate for that
-data. The 20–39 range's single scored answer (4 flags) is consistent with
-that same finding: its flagged similarity scores were **0.51, 0.51, 0.55,
-0.55** — all clustered right at the 0.55 cutoff, none in the "clearly
-wrong" range. **The newest 0–19 rerun's 61 flags have not yet been
-inspected at the sentence level** (the full per-query file wasn't
-available for direct analysis this round) — worth checking whether the
-same pattern holds before drawing conclusions from the combined 0.167
-rate, the same way `docs/citation_accuracy_results_limit20.json` was
-checked previously.
-
-**Original per-query analysis (Aug 18 batch, 8 scored / 37 flags)** — the
-37 flags were not evenly spread: **26 of 37 (70%) come from a single
-query**, *"How do I set up the internship onboarding checklist?"* Its
-answer is a long bulleted checklist where the model tags **every bullet,
-regardless of length, with both source citations** (`[1], [2]` repeated
-on each line). Each short one-line bullet then gets checked against the
-*entire* source chunk (which covers the whole multi-item checklist) — a
-one-line item can't fully match a large multi-topic chunk, so its
-similarity structurally lands just under the threshold. Sample scores
-from that query: 0.46, 0.46, 0.47, 0.47.
-
-This pattern held across all 37 of that batch's flags: none scored below
-0.2 (where a citation would look genuinely unrelated to its source) and
-29 of 37 sat in the 0.40–0.54 band, clustered just under the 0.55 cutoff
-— consistent with the 20–39 range's 4 flags above. This reads as **the
-0.55 threshold being too strict for list-formatted, multi-citation
-answers**, not the model citing unsupported claims, across every batch
-inspected so far.
+**Explicitly not resolved, and not this evaluation's job to resolve —
+recommended as follow-up work, not part of Track B's scope:**
+- **Span-targeted comparison**: score the cited claim against the
+  specific paragraph or list item within the source chunk that best
+  matches it (a secondary retrieval step within the chunk), rather than
+  the whole chunk — directly targets the length/breadth bias identified
+  above.
+- **LLM-as-judge entailment**: replace the similarity/relevance score
+  with a direct yes/no "does this source support this claim?" prompt to
+  an LLM, which doesn't have the same length-bias failure mode as a
+  fixed-dimension embedding comparison.
+- Full 40/40 coverage of the citation-accuracy script under whichever
+  scoring approach eventually gets adopted, once one exists that passes
+  this same manual-validation bar.
 
 ## 4. Known limitations
 
-Carried over from Week 1-3 notes plus new limitations specific to this
-evaluation:
-
-- **Cross-document entity resolution** and **NER noise on spec-style
-  documents** — flagged in Week 1 (rows 6/7 of the tracker), not fixed,
-  not blocking. Affects graph-derived features (technology map, skill
-  dependencies), not search or citation accuracy directly.
 - **Precision@10 is structurally capped** by corpus size relative to
-  `k=10`, per § 2 above — not a retrieval defect, but means precision@10
-  alone shouldn't be read as "90%+ of results are noise."
-- **The citation similarity check is a proxy, not entailment.** A
-  cosine-similarity threshold on sentence-vs-source embeddings can pass a
-  claim that merely shares vocabulary with its source without actually
-  being supported by it, and can flag a legitimately-supported claim that
-  happens to be phrased very differently from the source text. Treat
-  `citation_accuracy_rate` as a signal for where to spot-check, not a
-  guarantee.
-- **Only cited claims are checked.** Neither `verify_citations()` nor this
-  script detects an *uncited* factual claim that should have had a
-  citation and didn't — that's what `num_answers_with_no_citations`
-  partially surfaces (whole answers with zero citations), but a
-  partially-cited answer with one unsupported uncited sentence next to
-  three well-cited ones isn't caught at the sentence level.
-- **Citation accuracy results reflect a handful of partial runs
-  (n=13 combined), not variance across many runs.** Gemini generation is
-  non-deterministic; each run of `check_citation_accuracy.py` is a
-  snapshot, not a confidence interval, and n=13 is still too small to
-  treat 0.167 as a stable rate rather than a developing signal.
-  Completing the remaining 27 queries (and re-running on separate days)
-  before the Thursday writeup would strengthen this section considerably.
-- **The free-tier Gemini quota (20 requests/day/model) limits how much
-  live evaluation can happen per day**, on both this check and ordinary
-  `/ask` testing sharing the same quota. This is an account/billing
-  constraint, not a code defect — see § 3's "Running the citation
-  accuracy check" for the `--offset`/`--limit` workaround.
-- **Gemini's own server-side 503 overload errors are a real, separate
-  source of missing data**, distinct from quota exhaustion — 12 of 20
-  queries in the first Aug 18 attempt failed this way. These are worth
-  retrying (transient, not a hard cap like quota), but until retried they
-  leave real gaps in coverage, not just quota-driven ones.
-- **DNS resolution failures blocked most of the Aug 19 20–39-range run**
-  (`Failed to resolve 'generativelanguage.googleapis.com'` — 19 of 20
-  queries in that batch). This is a container/network-level failure, not
-  a quota, code, or Gemini-side issue — the request never left the
-  container. Likely causes: Docker's embedded DNS resolver having a
-  transient hiccup, or network instability around the time of that run
-  (possibly related to switching `GOOGLE_API_KEY`/project and recreating
-  the container beforehand). If it recurs, check
-  `docker compose exec api getent hosts generativelanguage.googleapis.com`
-  before assuming it's a Gemini-side problem, and consider retrying after
-  a plain `docker compose restart api` (no `--force-recreate` needed) to
-  rule out a stuck network namespace.
+  `k=10` — see § 2's interpretation note. Not a retrieval defect.
+- **The free-tier Gemini quota (20 requests/day/model) severely limited
+  how much live data could be collected for citation-accuracy work.**
+  Across three days (Aug 18–20) and roughly ten separate run attempts,
+  many batches scored 0–2 queries before exhausting the day's quota,
+  and two runs failed almost entirely to transient causes (a `503`
+  overload wave, and a batch of DNS resolution failures later confirmed
+  transient via `getent hosts`). This is an account/infrastructure
+  constraint, not a code defect, and — per § 3.3 — expanding sample size
+  under the current scoring approach wouldn't have changed the outcome
+  regardless.
+- **Cross-document entity resolution and NER noise on spec-style
+  documents** — flagged in Week 1, not fixed, not blocking. Affects
+  graph-derived features (technology map, skill dependencies), not
+  search, generation, or citation accuracy directly.
+- **The manual validation in § 3.2 is itself a sample of 16 flags**, not
+  the full 40-query set. The finding (no working threshold exists) is
+  strong enough — spanning the full observed score range with both
+  clear-true-positives and plausible-issues overlapping — that more
+  samples under the same scoring approach are unlikely to change the
+  conclusion, but this is judgment, not exhaustive proof.
 
 ## 5. Recommendations
 
-- **The threshold/formatting-artifact finding (originally from the Aug 18
-  n=8 batch) holds up against the 20–39 range's data too** — its 4 flags
-  scored 0.51, 0.51, 0.55, 0.55, the same near-threshold clustering, none
-  in the "clearly wrong" range. Still not confirmed against the newest
-  0–19 rerun's 61 flags, which haven't been inspected at the sentence
-  level yet — do that next, the same way `citation_accuracy_results_limit20.json`
-  was checked before, before treating the combined 0.167 rate as settled.
-- Two concrete follow-ups from the threshold finding, either or both
-  worth doing:
-  - Consider whether `verify_citations()` should check a bulleted list
-    item against just the relevant portion of a multi-item source chunk
-    rather than the whole chunk, since a one-line item can't fully match
-    a large multi-topic source by design.
-  - Re-run a small sensitivity check with the threshold lowered (e.g. to
-    0.45) against the flagged answers collected so far to see how many
-    would clear — informs whether 0.55 needs adjusting generally or just
-    for list-style answers specifically.
-- **27 queries still need to run at least once**: 8 remaining in the
-  0–19 range (some combination of `503`s and quota hits across the two
-  attempts there), and 19 in the 20–39 range (mostly blocked by the DNS
-  failures in § 4 — worth investigating that before just retrying, since
-  a retry into the same broken network state will likely fail the same
-  way).
-- If a genuinely low-similarity pattern (scores well under 0.2) shows up
-  once the newest 61-flag batch and the remaining queries are inspected,
-  use `docs/citation_accuracy_results*.json`'s per-query breakdown (now
-  including `cited_source_text` on each flag — via the admin
-  answer-review queue, `GET /admin/answers?flagged_for_review=true`, or
-  directly in the JSON files) to decide whether the fix belongs in
-  retrieval, the system prompt, or the threshold.
-- Consider tracking an approximate "relevant chunk count" per
-  `eval_set.json` entry so precision can be measured at a `k` matched to
-  each query, rather than a fixed `k=10` that structurally caps it.
+- **Do not invest further time in threshold-tuning the current
+  similarity/relevance-based citation check.** § 3.2 shows the signal
+  itself doesn't separate the two classes it needs to separate; no
+  amount of additional data collection fixes that without changing the
+  underlying comparison mechanism.
+- If citation accuracy verification is revisited, start with
+  **LLM-as-judge entailment** (§ 3.3) — cheaper to prototype than
+  span-targeted retrieval and doesn't inherit the length-bias failure
+  mode either approach tried here shares.
+- The retrieval-accuracy result (§ 2) stands on its own and doesn't need
+  citation accuracy to be resolved — it can go into the case study
+  writeup as-is.
+- If a future citation-accuracy attempt needs more Gemini quota than the
+  free tier allows, budget for either enabling billing on the project
+  or explicitly planning multi-day, multi-key runs from the start rather
+  than discovering the constraint mid-investigation (see the tracker's
+  Track B history for how much of this cycle was lost to that
+  discovery).

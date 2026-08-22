@@ -2,6 +2,30 @@
 
 Ezitech AI-007 case study — central AI intelligence layer over organizational knowledge.
 
+## What's new in Week 4
+
+- **`docs/AI_Architecture_Diagram.md`** + **`docs/knowledge_graph_schema.md`**
+  — the AI Architecture Diagram and Knowledge Graph Design deliverables.
+- **`scripts/e2e_integration_test.py`** + **`docs/Integration_Test_Report.md`**
+  — end-to-end integration testing across every pipeline plus the
+  frontend, run over real HTTP against a live `docker compose` stack. This
+  pass also found and fixed a real gap: `/documents/{id}/summary` and
+  `/documents/compare` were implemented and tested but had no UI calling
+  them — a "Compare & summarize" card was added to the Documents tab
+  (`frontend/index.html` / `app.js`) so both required AI capabilities are
+  actually visible in a demo, not just reachable via curl.
+- **`docs/Deployment_Guide.md`** — local quickstart in more depth, a full
+  `.env` reference, and an honest gap list for what a staging/production
+  deployment would still need (auth, secrets management, async ingestion,
+  scaling, TLS, backups) beyond this case study's local-Docker-Compose
+  scope.
+- **`docs/Demo_Script.md`** + **`EKIE_Technical_Presentation.pptx`** — a
+  timed, step-by-step live-demo walkthrough and a 12-slide presentation
+  deck built from it.
+- **`SUBMISSION_CHECKLIST.md`** — final Week 4 checklist, distinguishing
+  what was actually verified (static checks, code review) from what still
+  needs a run against your live stack.
+
 ## Architecture
 
 ```
@@ -30,6 +54,10 @@ Monitoring: Prometheus metrics at /metrics
 cp .env.example .env          # fill in GOOGLE_API_KEY (free at https://aistudio.google.com/apikey)
 docker compose up --build
 ```
+
+For a deeper walkthrough (full `.env` reference, admin-user creation, and
+what changes for a shared/production deployment), see
+**`docs/Deployment_Guide.md`**.
 
 - Frontend: http://localhost:8000/ (single-page admin/search/ask UI, served
   by the API itself — see "Frontend" below)
@@ -674,6 +702,43 @@ container:
 ```bash
 docker exec -it ekie-api pytest tests/ -v
 ```
+
+## Running the E2E integration test
+
+`tests/` covers each pipeline's logic in isolation with mocks; it does not
+prove the pieces are actually wired together against a real running
+stack. `scripts/e2e_integration_test.py` does that: it drives real HTTP
+calls through every pipeline in dependency order — ingestion, embedding,
+knowledge graph, all 5 search modes, RAG + citations, document
+intelligence (summary/compare/suggest-updates), admin review, quality/
+analytics, evaluation, and monitoring. See `docs/Integration_Test_Report.md`
+for exactly what it covers and the one real gap it found (the missing
+Compare/Summarize UI, now fixed).
+
+```bash
+docker compose up --build       # if not already running
+pip install httpx               # one-time, on the host
+python scripts/e2e_integration_test.py
+
+# with an admin user already created, to also cover the admin-gated ~40%:
+EKIE_ADMIN_ID=<uuid> python scripts/e2e_integration_test.py
+```
+
+Steps that call Gemini (`/ask`, `/documents/{id}/summary`,
+`/documents/compare`) report `SKIP` rather than `FAIL` on a 429 — see
+"Troubleshooting" below, this is a known, documented quota limit, not a
+pipeline defect.
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `connection refused` / `OperationalError` talking to Postgres on startup | Postgres hadn't finished initializing yet | Shouldn't happen under Compose (`api` waits on `condition: service_healthy`); if running `api` standalone, wait for `docker exec ekie-postgres pg_isready -U ekie -d ekie` to report ready first |
+| `neo4j.exceptions.ServiceUnavailable: ... Connection refused` | Neo4j (a JVM app) can take 10-20+s to accept Bolt connections after its container reports "started" | Already guarded under Compose by a healthcheck + `app/main.py`'s retry-with-backoff; if it still happens, give Neo4j more time and retry |
+| `429` from `/ask`, `/documents/compare`, `/documents/{id}/summary`, or `POST /evaluation/run` | Gemini free-tier quota (20 requests/day/model) exhausted | Expected and documented — see `docs/Fixing_Gemini_Quota.md` and `docs/Evaluation_Report.md`; wait for the daily reset or use a different `GOOGLE_API_KEY` |
+| `ValueError: {"detail":"Not Found"}` from any Chroma operation, traceback pointing at `get_user_identity()` | ChromaDB client/server version mismatch | See "Known setup gotchas" below — client and server image must both be `0.5.23` |
+| A code change doesn't seem to take effect | Stale container image | `GET /health`'s `version` field is the fastest check; rebuild with `docker compose up --build` (or `docker compose build --no-cache api` if a layer is cached) |
+| A search/pipeline function's new parameter has no effect over HTTP despite a passing unit test | FastAPI silently drops query/form params not declared in the route signature — has bitten this repo 4 times, see "Known setup gotchas" below | Grep every route calling the function; confirm the parameter is declared in the route signature (list params need `Query()`, not a bare default) |
 
 ## Evaluation query set
 

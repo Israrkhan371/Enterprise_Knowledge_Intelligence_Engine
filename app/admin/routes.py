@@ -369,12 +369,22 @@ def approve_document(document_id: str, decision: str, comment: str = "", admin: 
     return ApprovalResponse(document_id=document_id, status=document.status)
 
 
-@router.get("/categories", response_model=list[CategoryResponse])
+@router.get(
+    "/categories",
+    response_model=list[CategoryResponse],
+    summary="List all document categories",
+    description="Administration: Manage Categories. Returns every category, unfiltered - used to populate category pickers (document upload, metadata search).",
+)
 def list_categories(db: Session = Depends(get_db)):
     return db.query(Category).all()
 
 
-@router.post("/categories", response_model=CategoryResponse)
+@router.post(
+    "/categories",
+    response_model=CategoryResponse,
+    summary="Create a new document category",
+    description="Administration: Manage Categories. No uniqueness check on name at this layer - callers should list first if avoiding duplicates matters.",
+)
 def create_category(name: str, description: str = "", db: Session = Depends(get_db)):
     category = Category(name=name, description=description)
     db.add(category)
@@ -499,7 +509,12 @@ def review_answer(usage_log_id: str, decision: str, comment: str = "", admin: Us
     )
 
 
-@router.get("/analytics/usage", response_model=UsageAnalyticsResponse)
+@router.get(
+    "/analytics/usage",
+    response_model=UsageAnalyticsResponse,
+    summary="Aggregate usage-analytics summary",
+    description="Administration: Monitor Usage Analytics. Totals/averages across all UsageLog rows (query volume, helpfulness rate, citation-verification rate) - the headline numbers behind the Analytics tab.",
+)
 def usage_analytics(db: Session = Depends(get_db)):
     row = db.execute(text("""
         SELECT COUNT(*) AS total_queries,
@@ -581,12 +596,20 @@ def usage_top_queries(limit: int = 10, db: Session = Depends(get_db)):
     return [TopQueryEntry(query=r.query, occurrences=r.occurrences) for r in rows]
 
 
-@router.get("/quality/duplicates")
+@router.get(
+    "/quality/duplicates",
+    summary="Detect duplicate documentation",
+    description="AI Capability: Detect Duplicate Documentation. Pairs of documents above the cosine-similarity threshold on their chunk embeddings, worst (most similar) pairs implied by threshold, not sorted by score.",
+)
 def quality_duplicates(db: Session = Depends(get_db)):
     return detect_duplicates(db)
 
 
-@router.get("/quality/outdated")
+@router.get(
+    "/quality/outdated",
+    summary="Detect outdated knowledge",
+    description="AI Capability: Detect Outdated Knowledge. Staleness heuristic (documents older than staleness_days) with an optional llm_cross_check pass that asks Gemini whether a flagged document is genuinely superseded by newer related content, not just old. llm_cross_check=True is slower and Gemini-quota-metered - leave False for a quick scan.",
+)
 def quality_outdated(
     staleness_days: int = 180,
     llm_cross_check: bool = False,
@@ -595,7 +618,11 @@ def quality_outdated(
     return detect_outdated(db, staleness_days=staleness_days, llm_cross_check=llm_cross_check)
 
 
-@router.get("/quality/gaps")
+@router.get(
+    "/quality/gaps",
+    summary="Detect knowledge gaps from low-scoring queries",
+    description="AI Capability: Recommend Missing Documentation. Mines usage_logs for queries that recur (min_occurrences) with a low average retrieval_score - real evidence the corpus is missing something people keep asking about, not a guess.",
+)
 def quality_gaps(db: Session = Depends(get_db)):
     return detect_knowledge_gaps(db)
 

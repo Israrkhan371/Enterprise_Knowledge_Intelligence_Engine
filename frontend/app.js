@@ -309,6 +309,33 @@ document.getElementById("githubForm").addEventListener("submit", async (e) => {
   loadDocuments();
 });
 
+// Public endpoints (no admin gate) — case-study capabilities "Summarize
+// Technical Documents" and "Compare Multiple Documents" hit
+// /documents/{id}/summary and /documents/compare directly, same as any
+// other knowledge-worker query. These previously had client stubs in
+// api.js (documentSummary/compareDocuments) but no UI ever called them.
+document.getElementById("summaryForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const id = document.getElementById("summaryDocId").value.trim();
+  const out = document.getElementById("summaryResult");
+  const res = await guard(API.documentSummary(id), { loadingEl: out });
+  out.innerHTML = `<div style="white-space:pre-wrap">${esc(res.summary)}</div>`;
+});
+
+document.getElementById("compareForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const a = document.getElementById("compareDocIdA").value.trim();
+  const b = document.getElementById("compareDocIdB").value.trim();
+  const out = document.getElementById("compareResult");
+  const res = await guard(API.compareDocuments(a, b), { loadingEl: out });
+  const sim = res.similarity !== null && res.similarity !== undefined ? res.similarity.toFixed(3) : "n/a";
+  out.innerHTML = `
+    <div class="meta">similarity: <b>${sim}</b></div>
+    <div style="white-space:pre-wrap">${esc(res.summary)}</div>
+    ${res.diff?.length ? `<ul>${res.diff.map((d) => `<li>${esc(d)}</li>`).join("")}</ul>` : ""}
+  `;
+});
+
 // IDs the user has checked for bulk approve/reject. Only ever holds IDs of
 // documents that are currently "pending" — approved/rejected docs don't get
 // a checkbox at all, since bulk-deciding them again is meaningless. Cleared

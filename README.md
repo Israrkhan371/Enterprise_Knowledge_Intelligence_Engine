@@ -168,6 +168,24 @@ mapped to each requirement.
   filtering would otherwise leave a document empty (protects short
   documents where `unstructured` misclassifies the entire body as a
   Title).
+  **Office Files** (`.xlsx`/`.pptx`) — a distinct line item from "PDF
+  Documents" in the case-study brief's Knowledge Sources list, not covered
+  by `load_docx` alone — are implemented as `load_xlsx`/`load_pptx`
+  (added 2026-08-22). No new dependency: `unstructured[all-docs]` (already
+  required for `load_pdf`/`load_docx`) transitively pulls in `openpyxl`
+  and `python-pptx`, so this was a missing-integration gap, not a
+  missing-library one. Unlike `load_docx`, `load_xlsx` does **not** filter
+  `Table` elements — a spreadsheet's content *is* its tables, so filtering
+  them the way `load_docx` filters `Table` would return almost nothing;
+  same reasoning as the Title-filtering exception below for `load_pptx`,
+  which keeps `Title` elements (a slide's title is often the only signal
+  for what its bullets are about) but still excludes `Table` — a real,
+  currently-accepted gap: a table embedded in a slide loses its cell text.
+  Covered by `tests/test_loaders.py` (missing-file, empty-file, and
+  registry-membership tests for both) and
+  `tests/test_keyword_search_integration.py` (real loader → real
+  chunker → real Postgres write → `keyword_search()`, same as every
+  other source type).
   Markdown and code (`load_code()`) are implemented and covered by
   automated tests, along with GitHub, meeting notes, transcripts, and blog
   loaders (`tests/test_loaders.py`, 25 passed/1 skipped, verified
@@ -217,12 +235,12 @@ mapped to each requirement.
   via `Index(..., postgresql_using="gin")` so `create_all()` creates it —
   confirmed live via `pg_indexes`, added 2026-07-30). Covered by
   `tests/test_keyword.py` (8 tests, mocked at the query level) and
-  `tests/test_keyword_search_integration.py` (12 tests: real loader → real
+  `tests/test_keyword_search_integration.py` (14 tests: real loader → real
   chunker → real Postgres write → `keyword_search()`, one per source type,
   GitHub mocked to avoid a live network call; PDF is `@pytest.mark.skip`ed
   pending a real `tests/fixtures/sample.pdf`, same as `test_loaders.py`'s
   equivalent skip). Manually verified against real ingested content across
-  all 11 source types, including PDF and a real GitHub repo run through
+  all 13 source types, including PDF and a real GitHub repo run through
   the full `ingest_github_repo()` pipeline, not just `load_github_repo()`
   (2026-07-30). Known limitation: Postgres's tokenizer treats a leading
   `/` as part of the token, so a query for a path-like term (e.g. an

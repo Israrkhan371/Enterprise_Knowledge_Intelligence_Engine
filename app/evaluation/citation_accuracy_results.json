@@ -1,0 +1,169 @@
+{
+  "citation_accuracy": 0.0,
+  "verified": 0,
+  "total_with_citations": 0,
+  "queries_with_no_citations": 0,
+  "num_eval_queries": 40,
+  "failures": [
+    {
+      "query": "How do I set up the internship onboarding checklist?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What is the duration and team size for the Enterprise Knowledge Intelligence Engine case study?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What are the bonus challenges available for the EKIE case study?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What deliverables are required for an EEF industry AI case study?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "How is an intern's case study graded, and what is each evaluation criterion worth?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What is Ezitech's coding standard for Python projects?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What naming conventions should I use for variables and functions in Ezitech projects?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What is the required code review process before merging a pull request?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "Does Ezitech require type hints and docstrings on all Python functions?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What is the SOP for onboarding a new mentor?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What is the standard procedure for reporting a production incident?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "How should an intern request access to internal repositories and tools?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What is the escalation path if a mentor is unresponsive for more than 48 hours?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "How is the ingestion pipeline structured in the EKIE repository?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "Where is entity and relationship extraction implemented for the knowledge graph?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "How does the hybrid search endpoint combine semantic and keyword results?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "Where are the FastAPI routes for the knowledge platform defined?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What request body does the POST /ask endpoint expect?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What parameters does the /search/hybrid endpoint accept?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What HTTP status code does the document summary endpoint return for a missing document?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What columns does the documents table have?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "How are document chunks linked back to their parent document in the database?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What node and relationship types exist in the Neo4j knowledge graph?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What topics are covered in the introductory Retrieval-Augmented Generation course?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "Where can I learn about vector databases and embedding models as a new intern?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "Is there a course on FastAPI fundamentals for backend interns?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What ranking method does reciprocal rank fusion use to combine multiple search result lists?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What are the tradeoffs between dense and sparse retrieval methods?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What decisions were made in the Week 2 architecture review meeting?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What action items came out of the sprint planning meeting for the knowledge graph feature?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What did the mentor explain about chunking strategy in the recorded onboarding session?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What was discussed in the recorded session about evaluating retrieval quality?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What does Ezitech's engineering blog say about choosing between Pinecone and ChromaDB?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What are best practices for prompt engineering according to the internal blog?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What is Ezitech's data retention policy for uploaded documents?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What is the company's policy on using third-party AI APIs with customer data?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What is Ezitech's remote work policy for interns?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "What's the difference between the code review SOP and the mentor onboarding SOP?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "How does the Python coding standard relate to the code review SOP's approval criteria?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    },
+    {
+      "query": "Is there a documented SOP for offboarding an intern at the end of their program?",
+      "error": "HTTP 429: {\"detail\":\"LLM provider quota exceeded \u2014 try again later or check your Gemini API plan/billing.\"}"
+    }
+  ]
+}

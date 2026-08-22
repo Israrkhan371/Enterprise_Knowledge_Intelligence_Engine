@@ -153,6 +153,22 @@
     </div>
 
     <div class="card">
+      <h2>Compare &amp; summarize</h2>
+      <p class="panel-sub">Public endpoints — no admin ID required. Paste document IDs from the Corpus table below.</p>
+      <form id="summaryForm" class="upload-form">
+        <input type="text" id="summaryDocId" placeholder="document_id to summarize" required>
+        <button type="submit" class="btn btn-ghost">Summarize</button>
+      </form>
+      <div id="summaryResult" class="inline-result"></div>
+      <form id="compareForm" class="upload-form">
+        <input type="text" id="compareDocIdA" placeholder="document_id A" required>
+        <input type="text" id="compareDocIdB" placeholder="document_id B" required>
+        <button type="submit" class="btn btn-ghost">Compare</button>
+      </form>
+      <div id="compareResult" class="inline-result"></div>
+    </div>
+
+    <div class="card">
       <div class="card-head-row">
         <h2>Corpus</h2>
         <div class="inline-controls">
@@ -166,6 +182,12 @@
           <input type="text" id="docSourceTypeFilter" placeholder="source_type">
           <button class="btn btn-ghost" id="reloadDocs">Refresh</button>
         </div>
+      </div>
+      <div class="inline-controls" id="bulkActionsBar" style="margin: 0.75rem 0;">
+        <label class="checkbox-label"><input type="checkbox" id="selectAllPending"> Select all pending</label>
+        <span id="bulkSelectedCount" class="hint" style="margin: 0;">0 selected</span>
+        <button class="btn btn-sm" id="bulkApproveBtn" disabled>Approve selected</button>
+        <button class="btn btn-sm btn-danger" id="bulkRejectBtn" disabled>Reject selected</button>
       </div>
       <div id="docsTable" class="data-table"></div>
     </div>

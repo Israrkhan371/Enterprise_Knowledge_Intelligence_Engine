@@ -70,7 +70,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.evaluation.eval import load_eval_set
 from app.rag.citation_check import verify_citations
-from app.rag.generate import generate_answer
+from app.rag.generate import GeminiQuotaExceededError, generate_answer
 
 logger = logging.getLogger(__name__)
 
@@ -128,13 +128,33 @@ def run(k: int = 6, offset: int = 0, limit: int | None = None) -> dict:
     if not eval_set:
         return {"error": f"offset {offset} is past the end of the {len(full_eval_set)}-query eval set"}
 
+    results_path = _results_path(offset, limit)
+    results_path.parent.mkdir(exist_ok=True)
+
     db = SessionLocal()
     per_query = []
+    quota_hit_at = None  # index into eval_set where the daily quota ran out, if it did
     try:
-        for item in eval_set:
+        for i, item in enumerate(eval_set):
             query = item["query"]
             try:
                 result = generate_answer(db, query, top_k=k)
+            except GeminiQuotaExceededError as exc:
+                # This is a *daily* cap, not a per-minute one (see the
+                # module docstring), so once one call hits it every
+                # subsequent call in this run will hit it too. Continuing
+                # the loop would just spend the rest of the run turning
+                # every remaining query into an identical logged failure —
+                # burning wall-clock time for zero new information, and
+                # cluttering per_query with 39 copies of the same error
+                # instead of one clear "stopped here, come back tomorrow"
+                # marker. Stop immediately and record the rest as skipped
+                # so a re-run with --offset can pick up exactly where this
+                # one left off.
+                logger.warning("Gemini daily quota exhausted at query %d/%d — stopping run early", i + 1, len(eval_set))
+                per_query.append({"query": query, "error": f"quota exhausted: {exc}"})
+                quota_hit_at = i
+                break
             except TimeoutError:
                 per_query.append({"query": query, "error": "LLM request timed out"})
                 continue
@@ -142,18 +162,37 @@ def run(k: int = 6, offset: int = 0, limit: int | None = None) -> dict:
                 logger.exception("generate_answer failed for query=%r", query)
                 per_query.append({"query": query, "error": str(exc)})
                 continue
+            else:
+                verification = verify_citations(result["answer"], result["sources"])
+                per_query.append({
+                    "query": query,
+                    "answer": result["answer"],
+                    "num_sources_offered": len(result["sources"]),
+                    "num_citations_in_answer": len(verification["cited_sources"]),
+                    "verified": verification["verified"],
+                    "flags": _enrich_flags(verification["flags"], result["sources"]),
+                })
 
-            verification = verify_citations(result["answer"], result["sources"])
-            per_query.append({
-                "query": query,
-                "answer": result["answer"],
-                "num_sources_offered": len(result["sources"]),
-                "num_citations_in_answer": len(verification["cited_sources"]),
-                "verified": verification["verified"],
-                "flags": _enrich_flags(verification["flags"], result["sources"]),
-            })
+            # Written after every query, not just at the end: a run that
+            # dies partway (quota exhaustion, a killed container, a crash)
+            # still leaves every query scored so far on disk instead of
+            # losing them, which matters most on exactly the runs most
+            # likely to be interrupted — long ones against a nearly-
+            # exhausted quota.
+            results_path.write_text(json.dumps({"per_query": per_query}, indent=2))
     finally:
         db.close()
+
+    if quota_hit_at is not None:
+        skipped = eval_set[quota_hit_at + 1:]
+        for item in skipped:
+            per_query.append({"query": item["query"], "error": "skipped: quota exhausted earlier in this run"})
+        next_offset = offset + quota_hit_at
+        print(
+            f"\nStopped after {quota_hit_at} queries — daily Gemini quota exhausted. "
+            f"{len(skipped)} queries skipped. Resume tomorrow with:\n"
+            f"    docker compose exec api python scripts/check_citation_accuracy.py --offset {next_offset} --limit {limit if limit is not None else len(eval_set) - quota_hit_at}\n"
+        )
 
     scored = [q for q in per_query if "error" not in q]
     errored = [q for q in per_query if "error" in q]
@@ -192,10 +231,13 @@ def run(k: int = 6, offset: int = 0, limit: int | None = None) -> dict:
         "flag_breakdown": dict(flag_breakdown),
         "total_flags": len(all_flags),
         "k": k,
+        "stopped_early_on_quota": quota_hit_at is not None,
     }
 
-    results_path = _results_path(offset, limit)
-    results_path.parent.mkdir(exist_ok=True)
+    # Final write includes the summary alongside per_query (the incremental
+    # writes during the loop only had per_query, since the summary can't be
+    # computed until the run — or the quota-exhausted portion of it — is
+    # actually finished).
     results_path.write_text(json.dumps({"summary": summary, "per_query": per_query}, indent=2))
     summary["_results_path"] = str(results_path)
 

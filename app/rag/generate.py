@@ -1,6 +1,6 @@
 from google import genai
+from google.genai import errors as genai_errors
 from google.genai import types
-
 from app.core.config import settings
 from app.rag.gemini_utils import call_with_retry
 from app.search.hybrid import hybrid_search
@@ -11,6 +11,19 @@ SYSTEM_PROMPT = """You are Ezitech's Enterprise Knowledge Intelligence assistant
 Answer only using the provided source chunks. For every claim, cite the source
 number in square brackets, e.g. [1]. If the sources don't contain the answer,
 say so plainly instead of guessing."""
+
+
+class GeminiQuotaExceededError(Exception):
+    """
+    Raised when the Gemini API rejects a call with 429 RESOURCE_EXHAUSTED
+    (daily/per-minute quota hit). Distinct from a plain google.genai
+    ClientError so callers (see app/api/routes.py::ask) can catch this
+    specifically and return a clean 429 to the client instead of letting
+    an unrelated Gemini 4xx/5xx or the raw SDK exception surface as an
+    opaque 500 — this was previously uncaught, so a single exhausted free-
+    tier quota (20 requests/day) turned every subsequent /ask call into an
+    unhandled-exception 500 with no indication of the actual cause.
+    """
 
 
 def build_context_block(hits: list[dict]) -> str:
@@ -24,19 +37,23 @@ def generate_answer(db, query: str, top_k: int = 6) -> dict:
     hits = hybrid_search(db, query, top_k=top_k)
     context = build_context_block(hits)
 
-    response = call_with_retry(
-        _client.models.generate_content,
-        timeout_seconds=settings.gemini_timeout_seconds,
-        model=settings.gemini_model,
-        contents=f"Sources:\n{context}\n\nQuestion: {query}",
-        config=types.GenerateContentConfig(
-            system_instruction=SYSTEM_PROMPT,
-            max_output_tokens=1000,
-        ),
-    )
+    try:
+        response = call_with_retry(
+            _client.models.generate_content,
+            timeout_seconds=settings.gemini_timeout_seconds,
+            model=settings.gemini_model,
+            contents=f"Sources:\n{context}\n\nQuestion: {query}",
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                max_output_tokens=1000,
+            ),
+        )
+    except genai_errors.ClientError as exc:
+        if exc.code == 429:
+            raise GeminiQuotaExceededError(str(exc)) from exc
+        raise
 
     answer_text = response.text or ""
-
     return {
         "answer": answer_text,
         # Full chunk text, not a truncated preview: this list is fed straight

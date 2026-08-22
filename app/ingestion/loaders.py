@@ -113,6 +113,74 @@ def load_docx(path: str) -> str:
     return filtered
 
 
+def load_xlsx(path: str) -> str:
+    """
+    "Office Files" per the case-study brief's Knowledge Sources list —
+    same category as load_docx, just the spreadsheet half of it. No new
+    dependency: unstructured[all-docs] (already required for load_pdf/
+    load_docx) pulls in openpyxl as a transitive dep for exactly this.
+
+    Deliberately does NOT filter Table elements the way load_docx filters
+    Title/Table — a spreadsheet's content *is* its tables; filtering them
+    out the way load_docx does would return almost nothing. unstructured's
+    partition_xlsx renders each sheet as an HTML table per Table element;
+    str() on it falls back to the parsed table's text representation,
+    which keeps cell values recoverable by both keyword search (raw
+    numbers/labels are still present as text) and semantic search
+    (still meaningfully embeddable, just not layout-preserving) without
+    pulling in a separate HTML-to-text step.
+
+    One sheet's data can still get split across chunk boundaries by
+    chunk_text() same as any other loader's output - no different
+    handling here than a long Word document would get.
+    """
+    from unstructured.partition.xlsx import partition_xlsx
+
+    elements = partition_xlsx(filename=path)
+    parts = [str(el).strip() for el in elements if str(el).strip()]
+
+    if not parts:
+        raise ValueError(f"No extractable content found in xlsx file: {path}")
+
+    return "\n\n".join(parts)
+
+
+def load_pptx(path: str) -> str:
+    """
+    "Office Files" per the case-study brief's Knowledge Sources list —
+    same category as load_docx/load_xlsx. No new dependency:
+    unstructured[all-docs] pulls in python-pptx transitively.
+
+    Unlike load_docx, Title elements are kept rather than filtered — a
+    slide's title is frequently the only signal for what the slide's
+    bullet points are actually about (e.g. a slide titled "Rollback
+    Plan" over bullets that only make sense with that heading attached),
+    so dropping it the way load_docx drops in-body headings would lose
+    real content here, not just redundant structure. Table elements are
+    still excluded, same rationale and same open gap as load_docx: a
+    table's cell text is dropped rather than partially preserved.
+    """
+    from unstructured.partition.pptx import partition_pptx
+    from unstructured.documents.elements import Table
+
+    elements = partition_pptx(filename=path)
+    parts = []
+    for el in elements:
+        if isinstance(el, Table):
+            continue
+        text = str(el).strip()
+        if not text:
+            continue
+        if text[-1] not in ".!?:":
+            text += "."
+        parts.append(text)
+
+    if not parts:
+        raise ValueError(f"No extractable content found in pptx file: {path}")
+
+    return "\n\n".join(parts)
+
+
 def load_markdown(path: str) -> str:
     return Path(path).read_text(encoding="utf-8", errors="ignore")
 
@@ -437,6 +505,8 @@ def load_lms(path: str) -> str:
 SOURCE_LOADERS = {
     "pdf": load_pdf,
     "docx": load_docx,
+    "xlsx": load_xlsx,
+    "pptx": load_pptx,
     "markdown": load_markdown,
     "code": load_code,
     "transcript": load_transcript,

@@ -9,10 +9,14 @@ python-docx — both already in requirements-lock.txt as unstructured deps.
 import pytest
 from pypdf import PdfWriter
 from docx import Document as DocxDocument
+from openpyxl import Workbook
+from pptx import Presentation
 
 from app.ingestion.loaders import (
     load_pdf,
     load_docx,
+    load_xlsx,
+    load_pptx,
     load_markdown,
     load_code,
     load_transcript,
@@ -55,6 +59,27 @@ def sample_docx_path(tmp_path):
 
 
 @pytest.fixture
+def sample_xlsx_path(tmp_path):
+    path = tmp_path / "sample.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws["A1"] = EXPECTED_TEXT
+    wb.save(str(path))
+    return str(path)
+
+
+@pytest.fixture
+def sample_pptx_path(tmp_path):
+    path = tmp_path / "sample.pptx"
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[1])  # title + content layout
+    slide.shapes.title.text = "Test Slide"
+    slide.placeholders[1].text = EXPECTED_TEXT
+    prs.save(str(path))
+    return str(path)
+
+
+@pytest.fixture
 def sample_markdown_path(tmp_path):
     path = tmp_path / "sample.md"
     path.write_text(f"# Heading\n\n{EXPECTED_TEXT}\n", encoding="utf-8")
@@ -78,6 +103,64 @@ def test_load_docx_returns_expected_text(sample_docx_path):
 def test_load_docx_raises_on_missing_file():
     with pytest.raises(Exception):
         load_docx("/nonexistent/path/sample.docx")
+
+
+# --- xlsx ("Office Files" per the case-study brief) ---------------------
+
+def test_load_xlsx_returns_expected_text(sample_xlsx_path):
+    text = load_xlsx(sample_xlsx_path)
+    assert EXPECTED_TEXT in text
+
+
+def test_load_xlsx_raises_on_missing_file():
+    with pytest.raises(Exception):
+        load_xlsx("/nonexistent/path/sample.xlsx")
+
+
+def test_load_xlsx_raises_on_empty_workbook(tmp_path):
+    # An all-empty sheet is a real case (a template someone uploads by
+    # mistake, or a sheet that's genuinely just formatting/no data) -
+    # should fail loudly via ValueError, not silently ingest a
+    # zero-content document that then can't ever surface in search.
+    path = tmp_path / "empty.xlsx"
+    Workbook().save(str(path))
+    with pytest.raises(ValueError, match="No extractable content"):
+        load_xlsx(str(path))
+
+
+def test_load_xlsx_is_registered_in_source_loaders():
+    assert SOURCE_LOADERS["xlsx"] is load_xlsx
+
+
+# --- pptx ("Office Files" per the case-study brief) ----------------------
+
+def test_load_pptx_returns_expected_text(sample_pptx_path):
+    text = load_pptx(sample_pptx_path)
+    assert EXPECTED_TEXT in text
+
+
+def test_load_pptx_keeps_slide_titles(sample_pptx_path):
+    # Unlike load_docx (which filters Title elements out - see its
+    # docstring), load_pptx deliberately keeps them: a slide's bullets
+    # are often meaningless without the title they're under.
+    text = load_pptx(sample_pptx_path)
+    assert "Test Slide" in text
+
+
+def test_load_pptx_raises_on_missing_file():
+    with pytest.raises(Exception):
+        load_pptx("/nonexistent/path/sample.pptx")
+
+
+def test_load_pptx_raises_on_empty_presentation(tmp_path):
+    path = tmp_path / "empty.pptx"
+    Presentation().save(str(path))  # zero slides
+    with pytest.raises(ValueError, match="No extractable content"):
+        load_pptx(str(path))
+
+
+def test_load_pptx_is_registered_in_source_loaders():
+    assert SOURCE_LOADERS["pptx"] is load_pptx
 
 
 # --- pdf ----------------------------------------------------------------
@@ -572,8 +655,8 @@ def test_load_lms_raises_on_missing_file():
 
 def test_source_loaders_registry_has_expected_keys():
     assert set(SOURCE_LOADERS.keys()) == {
-        "pdf", "docx", "markdown", "code", "transcript", "meeting_notes", "blog",
-        "api_docs", "db_schema", "lms",
+        "pdf", "docx", "xlsx", "pptx", "markdown", "code", "transcript",
+        "meeting_notes", "blog", "api_docs", "db_schema", "lms",
     }
 
 

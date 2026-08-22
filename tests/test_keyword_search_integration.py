@@ -29,6 +29,8 @@ import uuid
 
 import pytest
 from docx import Document as DocxDocument
+from openpyxl import Workbook
+from pptx import Presentation
 from sqlalchemy import text as sql_text
 
 from app.core.database import SessionLocal
@@ -181,6 +183,35 @@ def test_keyword_search_finds_docx_content(db, tmp_path):
 
     text = load_by_source_type("docx", str(path))
     results = _store_and_search(db, "docx", text, marker)
+
+    assert any(marker in r["text"] for r in results)
+
+
+def test_keyword_search_finds_xlsx_content(db, tmp_path):
+    marker = _marker()
+    path = tmp_path / "sample.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws["A1"] = f"This spreadsheet mentions {marker} in a cell."
+    wb.save(str(path))
+
+    text = load_by_source_type("xlsx", str(path))
+    results = _store_and_search(db, "xlsx", text, marker)
+
+    assert any(marker in r["text"] for r in results)
+
+
+def test_keyword_search_finds_pptx_content(db, tmp_path):
+    marker = _marker()
+    path = tmp_path / "sample.pptx"
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[1])
+    slide.shapes.title.text = "Test Slide"
+    slide.placeholders[1].text = f"This slide mentions {marker} in the body."
+    prs.save(str(path))
+
+    text = load_by_source_type("pptx", str(path))
+    results = _store_and_search(db, "pptx", text, marker)
 
     assert any(marker in r["text"] for r in results)
 

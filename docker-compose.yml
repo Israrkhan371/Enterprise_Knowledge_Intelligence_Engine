@@ -28,7 +28,7 @@ services:
     container_name: ekie-postgres
     environment:
       POSTGRES_USER: ekie
-      POSTGRES_PASSWORD: ekie_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ekie_password}
       POSTGRES_DB: ekie
     ports:
       - "5432:5432"
@@ -56,7 +56,7 @@ services:
     image: neo4j:5-community
     container_name: ekie-neo4j
     environment:
-      NEO4J_AUTH: neo4j/ekie_password
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-ekie_password}
     ports:
       - "17474:7474"    
       - "7687:7687"

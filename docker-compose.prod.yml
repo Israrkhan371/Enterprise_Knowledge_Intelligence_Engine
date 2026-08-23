@@ -1,0 +1,70 @@
+# Production override — used ON THE CLOUD SERVER ONLY, layered on top of the
+# existing docker-compose.yml:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# What this changes and why (see docs/FREE_DEPLOYMENT_GUIDE.md Phase 4 for
+# the full explanation of each line):
+#
+# 1. Every backend service (postgres, neo4j, chromadb, mlflow, prometheus)
+#    loses its "ports:" mapping. They stay reachable to each other and to
+#    `api` over Docker's internal network (Compose's default bridge network,
+#    resolved by service name — e.g. `postgres`, `neo4j:7687`) but are no
+#    longer bound to the host's network interface at all, so nothing on the
+#    public internet can reach them directly, regardless of any cloud
+#    firewall rule. This is a stronger guarantee than "firewall closed" —
+#    there is no port to find even if a firewall rule were misconfigured.
+# 2. `api` also loses its public port mapping — the public internet reaches
+#    it only through the `caddy` reverse proxy below, over HTTPS.
+# 3. `api`'s dev bind-mounts (./app, ./frontend, etc.) and `--reload` are
+#    removed — in production you want the exact code baked into the image
+#    by `docker compose build`, not live-reloaded from host files that only
+#    exist on your laptop anyway.
+# 4. A `caddy` service is added: the only container with a public port
+#    (80/443). It automatically obtains and renews a free HTTPS certificate
+#    from Let's Encrypt for whatever hostname you set in docker/Caddyfile,
+#    and reverse-proxies everything to `api:8000` over the internal network
+#    — except `/metrics`, which it blocks even though `api` serves it
+#    (Prometheus itself scrapes `/metrics` directly over the internal
+#    network, never through Caddy, so this only removes a public leak, not
+#    the actual monitoring).
+
+services:
+  api:
+    ports: []
+    volumes:
+      - hf_cache:/root/.cache
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  postgres:
+    ports: []
+
+  neo4j:
+    ports: []
+
+  chromadb:
+    ports: []
+
+  mlflow:
+    ports: []
+
+  prometheus:
+    ports: []
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: ekie-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

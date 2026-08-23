@@ -1,0 +1,24 @@
+# Caddy automatically gets and renews a free Let's Encrypt HTTPS certificate
+# for whatever hostname you put below, then reverse-proxies to the api
+# container over Docker's internal network. See docs/FREE_DEPLOYMENT_GUIDE.md
+# Phase 3 step 19 for how to get a free hostname if you don't already have
+# a domain (DuckDNS is the recommended $0 option).
+#
+# Replace the placeholder below with your real hostname before starting:
+#   your-name.duckdns.org
+#
+# {$EKIE_DOMAIN} lets you instead set EKIE_DOMAIN=your-name.duckdns.org in
+# .env and Caddy will pick it up automatically — either approach works,
+# don't do both.
+
+{$EKIE_DOMAIN:your-name.duckdns.org} {
+	# /metrics is served by the api container itself (Prometheus's scrape
+	# target), on the SAME port as the public API. Without this line it
+	# would be reachable at https://your-domain/metrics for anyone —
+	# Prometheus itself never goes through Caddy, it scrapes api:8000/metrics
+	# directly over the internal Docker network, so blocking it here only
+	# closes the public leak, monitoring keeps working.
+	respond /metrics 404
+
+	reverse_proxy api:8000
+}

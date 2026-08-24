@@ -3,7 +3,9 @@
 **Deliverable:** Deployment Guide (Case Study AI-007 deliverables list).
 For local dev quickstart, see README "Quickstart" — this document covers
 the same local path in more depth, plus what changes for a shared/staging
-or production deployment.
+or production deployment. For step-by-step instructions to actually put
+this on the public internet at no cost, see
+`docs/FREE_DEPLOYMENT_GUIDE.md`.
 
 ## 1. Local development (fully supported, this is what's been tested)
 
@@ -104,14 +106,14 @@ treated as a roadmap, not silently glossed over:
 | Area | Current state | What production needs |
 |---|---|---|
 | **Auth** | `X-User-Id` header checked against `users.role` — no password, no session, no token expiry | Real auth (OAuth2/JWT, or an identity provider) before this touches a shared network |
-| **Secrets** | Plaintext in `.env` (`.env` is gitignored, but `.env.example` and the Postgres/Neo4j passwords in `docker-compose.yml` are placeholders committed to source) | A secrets manager (Vault, AWS/GCP secret manager, or at minimum environment injection via CI/CD, never committed passwords) |
+| **Secrets** | Real passwords/API keys now live in a server-side `.env` (`docker-compose.yml`'s `${POSTGRES_PASSWORD:-ekie_password}`-style defaults mean nothing sensitive needs to be *committed* — see `docs/FREE_DEPLOYMENT_GUIDE.md`), but it's still a plaintext file on one server, not a managed secret store | A real secrets manager (Vault, AWS/GCP secret manager) for anything beyond a single-server deployment |
 | **Ingestion** | Synchronous — upload blocks until chunk/embed/graph-populate finish (see `docs/AI_Architecture_Diagram.md` "Known architectural trade-offs") | Background job queue (Celery/RQ/Arq) with an async `processing` status |
 | **Scaling** | Single `api` container, single Postgres/Neo4j/Chroma instance each | Horizontal scaling for `api` behind a load balancer (stateless — fine to scale); managed/clustered Postgres and Neo4j; ChromaDB's clustered mode or a managed vector DB (Pinecone/Weaviate, both already listed as alternatives in the case-study brief) for HA |
-| **TLS** | None — plain HTTP on all ports | A reverse proxy (nginx/Caddy/Traefik) or managed ingress terminating TLS in front of `api` |
+| **TLS** | Solved for a single-server deployment — `docker-compose.prod.yml` adds a `caddy` reverse proxy that automatically obtains and renews free Let's Encrypt certificates (see `docs/FREE_DEPLOYMENT_GUIDE.md`); backend services (Postgres, Neo4j, Chroma, MLflow, Prometheus, and `api` itself) no longer bind to the host at all, only reachable over Docker's internal network | A managed load balancer / ingress controller for anything beyond one server |
 | **Backups** | Named Docker volumes only (`pg_data`, `neo4j_data`, `chroma_data`, `mlflow_data`) — durable across `docker compose down` but not across host loss | Scheduled `pg_dump`/Neo4j dump/Chroma persistence-dir backups to off-host storage |
 | **Orchestration** | Docker Compose (single host) | Kubernetes (optional per the brief) for multi-host scheduling, rolling deploys, and resource limits — the existing container boundaries map directly onto Deployments/StatefulSets, so this is additive, not a redesign |
 | **Rate limiting / quota** | None on the API itself; the only quota is Gemini's own free-tier limit | Request rate limiting per user/API key, and a paid Gemini tier (or a self-hosted LLM) once real traffic exceeds 20 req/day/model |
-| **Observability** | Prometheus scraping `/metrics`; no alerting, no log aggregation | Alertmanager rules on top of the existing Prometheus setup; centralized log shipping (the Dockerfile already sets `PYTHONUNBUFFERED=1` so container logs are usable as-is) |
+| **Observability** | Prometheus scraping `/metrics` (now blocked from public access by `docker/Caddyfile`'s `respond /metrics 404` rule — Prometheus still reaches it directly over the internal network); no alerting, no log aggregation | Alertmanager rules on top of the existing Prometheus setup; centralized log shipping (the Dockerfile already sets `PYTHONUNBUFFERED=1` so container logs are usable as-is) |
 
 ## 4. Rollback / recovery
 
